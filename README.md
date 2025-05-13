@@ -1,4 +1,3 @@
-"""
 # YouTube Shorts Automation Script (v6)
 
 ## Overview
@@ -75,7 +74,4 @@ Located at the beginning of `youtube_shorts_script_v6.py`. Key additions/changes
 
 ## Output
 
-The script produces a video file with the features described, now incorporating the user's default settings, the refined waveform contrast color logic, and correct image-to-waveform spacing.
-
-"""
-
+The script produces a video file with the features described, incorporating the user's settings, the refined waveform contrast color logic, and correct image-to-waveform spacing.
