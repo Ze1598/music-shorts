@@ -1,4 +1,4 @@
-# YouTube Shorts Automation Script (v6)
+# YouTube Shorts Automation Script
 
 ## Overview
 
