@@ -4,8 +4,11 @@ import tempfile
 from pathlib import Path
 import shutil
 import sys
-import importlib.util
 import importlib
+
+# Import main module and its functions
+import video_generation
+import moviepy.editor as mpe
 
 st.set_page_config(
     page_title="YouTube Shorts Generator",
@@ -23,41 +26,87 @@ tab_input, tab_video, tab_background, tab_image, tab_waveform, tab_generate = st
 ])
 
 # Function to run the main script with the provided parameters
-def run_main_script(params):
+def generate_video(params):
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    main_script_path = os.path.join(script_dir, "main.py")
-    
-    # Store original values to restore later
-    import main
-    original_values = {}
-    for key in params.keys():
-        if hasattr(main, key):
-            original_values[key] = getattr(main, key)
-    
-    # Set the new parameter values in the main module
-    for key, value in params.items():
-        setattr(main, key, value)
     
     try:
         # Create output directory if it doesn't exist
         output_dir = os.path.dirname(os.path.join(script_dir, params["OUTPUT_VIDEO_FILENAME"]))
         os.makedirs(output_dir, exist_ok=True)
         
-        # Call the main functions directly
-        main.precompute_assets()
+        # Call the precompute_assets function from main.py with all necessary parameters
+        assets = video_generation.precompute_assets(
+            image_path=params["IMAGE_PATH"],
+            video_width=params["VIDEO_WIDTH"],
+            video_height=params["VIDEO_HEIGHT"],
+            background_mode=params["BACKGROUND_MODE"],
+            background_image_fit=params["BACKGROUND_IMAGE_FIT"],
+            background_blur_radius=params["BACKGROUND_BLUR_RADIUS"],
+            image_width_percentage=params["IMAGE_WIDTH_PERCENTAGE"],
+            image_corner_radius=params["IMAGE_CORNER_RADIUS"],
+            image_x_position=params["IMAGE_X_POSITION"],
+            image_y_position=params["IMAGE_Y_POSITION"],
+            shadow_darkness_factor=params["SHADOW_DARKNESS_FACTOR"],
+            shadow_blur_radius=params["SHADOW_BLUR_RADIUS"],
+            waveform_enabled=params["WAVEFORM_ENABLED"],
+            waveform_height_percentage=params["WAVEFORM_HEIGHT_PERCENTAGE"],
+            spacing_image_waveform=params["SPACING_IMAGE_WAVEFORM"],
+            audio_path=params["AUDIO_PATH"],
+            audio_start_time=params["AUDIO_START_TIME"],
+            audio_end_time=params["AUDIO_END_TIME"],
+            video_fps=params["VIDEO_FPS"],
+            waveform_analysis_mode=params["WAVEFORM_ANALYSIS_MODE"],
+            waveform_bar_count=params["WAVEFORM_BAR_COUNT"],
+            waveform_smoothing_factor=params["WAVEFORM_SMOOTHING_FACTOR"],
+            waveform_min_db=params["WAVEFORM_MIN_DB"],
+            waveform_max_db=params["WAVEFORM_MAX_DB"]
+        )
+        
+        # Calculate video duration
         video_duration = params["AUDIO_END_TIME"] - params["AUDIO_START_TIME"]
+        if video_duration <= 0: video_duration = 1
         
-        # Create the clip using the make_frame_for_moviepy function
-        import moviepy.editor as mpe
-        clip = mpe.VideoClip(main.make_frame_for_moviepy, duration=video_duration)
+        # Create a frame maker function that uses the assets and parameters
+        def frame_maker(t):
+            return video_generation.make_frame_for_moviepy(
+                t=t,
+                assets=assets,
+                video_fps=params["VIDEO_FPS"],
+                video_width=params["VIDEO_WIDTH"],
+                video_height=params["VIDEO_HEIGHT"],
+                background_mode=params["BACKGROUND_MODE"],
+                image_corner_radius=params["IMAGE_CORNER_RADIUS"],
+                shadow_offset_x=params["SHADOW_OFFSET_X"],
+                shadow_offset_y=params["SHADOW_OFFSET_Y"],
+                shadow_blur_radius=params["SHADOW_BLUR_RADIUS"],
+                waveform_enabled=params["WAVEFORM_ENABLED"],
+                waveform_color_mode=params["WAVEFORM_COLOR_MODE"],
+                waveform_color=params["WAVEFORM_COLOR"],
+                waveform_bar_count=params["WAVEFORM_BAR_COUNT"],
+                waveform_bar_spacing_ratio=params["WAVEFORM_BAR_SPACING_RATIO"]
+            )
         
-        # Set audio
+        # Create the video clip using the frame maker function
+        video_clip = mpe.VideoClip(frame_maker, duration=video_duration)
+        
+        # Add audio if available
         if os.path.exists(params["AUDIO_PATH"]):
-            audio = mpe.AudioFileClip(params["AUDIO_PATH"]).subclip(params["AUDIO_START_TIME"], params["AUDIO_END_TIME"])
-            clip = clip.set_audio(audio)
+            audio_clip = mpe.AudioFileClip(params["AUDIO_PATH"])
+            actual_start = min(max(0, params["AUDIO_START_TIME"]), audio_clip.duration)
+            actual_end = min(max(actual_start, params["AUDIO_END_TIME"]), audio_clip.duration)
+            
+            if actual_start >= actual_end:
+                video_clip = video_clip.set_audio(None)
+            else:
+                trimmed_audio = audio_clip.subclip(actual_start, actual_end)
+                if trimmed_audio.duration < video_clip.duration:
+                    video_clip = video_clip.set_duration(trimmed_audio.duration)
+                elif trimmed_audio.duration > video_clip.duration:
+                    trimmed_audio = trimmed_audio.set_duration(video_clip.duration)
+                video_clip = video_clip.set_audio(trimmed_audio)
         
         # Write the result to a file
-        clip.write_videofile(
+        video_clip.write_videofile(
             params["OUTPUT_VIDEO_FILENAME"],
             fps=params["VIDEO_FPS"],
             codec="libx264",
@@ -70,10 +119,6 @@ def run_main_script(params):
     except Exception as e:
         success = False
         message = f"Error generating video: {str(e)}"
-    finally:
-        # Restore original values
-        for key, value in original_values.items():
-            setattr(main, key, value)
     
     class Result:
         def __init__(self, success, message):
@@ -260,30 +305,31 @@ with tab_generate:
         elif not uploaded_audio:
             st.error("Please upload an audio file")
         else:
-            st.info("Generating video... This may take a while.")
-            
             # Convert color picker hex to RGB tuple if needed
             if background_mode == "solid":
                 bg_color = tuple(int(background_color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
-            
-            if waveform_color_mode == "custom":
-                wave_color = tuple(int(waveform_color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
             else:
-                wave_color = (255, 255, 255)  # Default
-            
-            # Prepare parameters
+                bg_color = (0, 0, 0)  # Default
+                
+            if waveform_color_mode == "custom":
+                waveform_color_tuple = tuple(int(waveform_color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
+            else:
+                waveform_color_tuple = (255, 255, 255)  # Default
+                
+            # Prepare parameters for the main script
             params = {
                 "IMAGE_PATH": image_path,
                 "AUDIO_PATH": audio_path,
                 "AUDIO_START_TIME": audio_start_time,
                 "AUDIO_END_TIME": audio_end_time,
-                "VIDEO_FPS": video_fps,
                 "OUTPUT_VIDEO_FILENAME": output_filename,
+                "VIDEO_FPS": video_fps,
                 "VIDEO_WIDTH": video_width,
                 "VIDEO_HEIGHT": video_height,
                 "BACKGROUND_MODE": background_mode,
-                "BACKGROUND_BLUR_RADIUS": background_blur_radius if background_mode == "blur_image" else 50,
+                "BACKGROUND_BLUR_RADIUS": background_blur_radius if background_mode == "blur_image" else 0,
                 "BACKGROUND_IMAGE_FIT": background_image_fit if background_mode == "blur_image" else "stretch",
+                "BACKGROUND_COLOR": bg_color,
                 "IMAGE_WIDTH_PERCENTAGE": image_width_percentage,
                 "IMAGE_CORNER_RADIUS": image_corner_radius,
                 "IMAGE_X_POSITION": image_x_position,
@@ -295,7 +341,7 @@ with tab_generate:
                 "WAVEFORM_ENABLED": waveform_enabled,
                 "WAVEFORM_ANALYSIS_MODE": waveform_analysis_mode,
                 "WAVEFORM_COLOR_MODE": waveform_color_mode,
-                "WAVEFORM_COLOR": wave_color,
+                "WAVEFORM_COLOR": waveform_color_tuple,
                 "WAVEFORM_HEIGHT_PERCENTAGE": waveform_height_percentage,
                 "WAVEFORM_BAR_COUNT": waveform_bar_count,
                 "WAVEFORM_BAR_SPACING_RATIO": waveform_bar_spacing_ratio,
@@ -305,49 +351,29 @@ with tab_generate:
                 "WAVEFORM_MAX_DB": waveform_max_db
             }
             
-            # Add BG_COLOR_SOLID_GLOBAL if solid background mode
-            if background_mode == "solid":
-                params["BG_COLOR_SOLID_GLOBAL"] = bg_color
-            
-            # Run script with parameters
-            try:
-                with st.spinner("Generating video..."):
-                    result = run_main_script(params)
+            with st.spinner("Generating YouTube Short..."):
+                # Generate the video using main.py functions directly
+                result = generate_video(params)
                 
                 if result.returncode == 0:
-                    # Get the path to the output video
-                    script_dir = os.path.dirname(os.path.abspath(__file__))
-                    output_path = os.path.join(script_dir, output_filename)
+                    st.success(result.stdout)
                     
-                    if os.path.exists(output_path):
-                        # Read the video file
-                        with open(output_path, "rb") as file:
-                            video_bytes = file.read()
-                        
-                        # Display success message and video
-                        st.success(f"Video generated successfully: {output_filename}")
-                        st.video(video_bytes)
-                        
-                        # Provide download button
+                    # Get the absolute path of the output video
+                    output_video_path = os.path.abspath(output_filename)
+                    
+                    # Display the video
+                    st.video(output_video_path)
+                    
+                    # Provide a download button
+                    with open(output_video_path, "rb") as file:
                         st.download_button(
                             label="Download Video",
-                            data=video_bytes,
-                            file_name=output_filename,
+                            data=file,
+                            file_name=os.path.basename(output_filename),
                             mime="video/mp4"
                         )
-                    else:
-                        st.error(f"Video file not found at {output_path}")
-                        st.code(result.stdout)
-                        st.code(result.stderr)
                 else:
-                    st.error("Error generating video")
-                    st.code(result.stdout)
-                    st.code(result.stderr)
-                
-                # No temporary files to clean up with direct import approach
-                
-            except Exception as e:
-                st.error(f"An error occurred: {str(e)}")
+                    st.error(result.stderr)
 
 st.sidebar.title("About")
 st.sidebar.info(
