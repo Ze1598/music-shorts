@@ -1,8 +1,8 @@
-# YouTube Shorts Automation Script
+# YouTube Shorts Generator
 
 ## Overview
 
-This Python script automates the creation of YouTube Shorts videos. It takes a square input image and an audio file, and generates a 9:16 aspect ratio video (defaulting to 60 FPS). The video features the input image centered with rounded corners, and its shadow also has rounded corners for a cohesive look. Users can choose between a solid background color (derived from the image's predominant color) or a blurred version of the input image as the background.
+This application automates the creation of YouTube Shorts videos. It takes a square input image and an audio file, and generates a 9:16 aspect ratio video (defaulting to 60 FPS). The video features the input image centered with rounded corners, and its shadow also has rounded corners for a cohesive look. Users can choose between a solid background color (derived from the image's predominant color) or a blurred version of the input image as the background.
 
 A key feature is an optional, highly customizable audio-reactive waveform animation displayed below the centered image, with configurable vertical spacing between the image and the waveform. This version (v6) incorporates user-preferred default parameter values, implements a more sophisticated "contrast" mode for waveform color selection (aiming for legible inverted or complementary-like colors before falling back to black/white), and ensures the shadow for both the main image and the waveform respects rounded corners.
 
@@ -31,20 +31,21 @@ All key aspects like input file paths, audio timings, image placement, visual ef
 
 ## Dependencies
 
--   **Pillow (PIL)**
+-   **Streamlit** (for the web interface)
+-   **Pillow (PIL)** (for image processing)
 -   **MoviePy** (version 1.0.3 recommended)
 -   **NumPy**
--   **Librosa**
+-   **Librosa** (for audio analysis)
 -   **colorsys** (Python built-in)
 
-Install using pip:
+Install all dependencies using pip:
 ```bash
-pip install Pillow moviepy==1.0.3 numpy librosa
+pip install -r requirements.txt
 ```
 
-## Script Parameters (Global Variables)
+## Parameters
 
-Located at the beginning of `youtube_shorts_script_v6.py`. Key additions/changes from v5:
+All parameters can be configured through the Streamlit interface or by editing the global variables at the beginning of `main.py`. Key parameters include:
 
 -   `VIDEO_FPS` (int): Frames per second for the output video (default: `60`).
 -   `SPACING_IMAGE_WAVEFORM` (int): Vertical spacing in pixels between the bottom of the centered image and the top of the waveform area (default: `20`, functionality confirmed).
@@ -55,11 +56,31 @@ Located at the beginning of `youtube_shorts_script_v6.py`. Key additions/changes
 
 ## How to Use
 
-1.  **Install Dependencies**.
-2.  **Prepare Inputs**: Square image and audio file.
-3.  **Configure Parameters**: Update placeholders for `IMAGE_PATH` and `AUDIO_PATH` in `youtube_shorts_script_v6.py`. Adjust other global variables as needed.
-4.  **Run Script**: `python3 youtube_shorts_script_v6.py` (or `python3.11`).
-5.  **Output**: Video file (e.g., `youtube_short_final_v6.mp4`).
+### Option 1: Streamlit Interface (Recommended)
+
+1. **Install Dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+2. **Run the Streamlit App**:
+   ```bash
+   streamlit run app.py
+   ```
+
+3. **Use the Interface**:
+   - Upload your image and audio files
+   - Configure all parameters using the intuitive interface
+   - Generate your video with a single click
+   - Download the resulting video directly from the app
+
+### Option 2: Direct Script Usage
+
+1. **Install Dependencies**.
+2. **Prepare Inputs**: Square image and audio file.
+3. **Configure Parameters**: Update placeholders for `IMAGE_PATH` and `AUDIO_PATH` in `main.py`. Adjust other global variables as needed.
+4. **Run Script**: `python main.py`.
+5. **Output**: Video file (e.g., `youtube_short_final_v6.mp4`).
 
 ## Script Execution Steps (Internal Logic Changes from v5)
 
