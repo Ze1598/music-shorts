@@ -1,49 +1,3 @@
-# Global Parameters
-IMAGE_PATH = "/Users/josecosta/Downloads/ChatGPT Image May 8, 2025, 11_03_35 PM.png"
-IMAGE_PATH = "/Users/josecosta/Downloads/ChatGPT Image Apr 29, 2025, 07_20_12 PM.png"
-
-AUDIO_PATH = "/Users/josecosta/Downloads/The Struggler, Pt. 3.wav"
-AUDIO_PATH = "/Users/josecosta/Downloads/Beast of Destruction v2.wav"
-AUDIO_START_TIME = 33  # Start time of the audio in seconds
-AUDIO_END_TIME = 86  # End time of the audio in seconds (also dictates video duration)
-
-VIDEO_FPS = 60
-OUTPUT_VIDEO_FILENAME = "youtube_short_final_v6.mp4"
-
-# Video dimensions (9:16 aspect ratio for YouTube Shorts)
-VIDEO_WIDTH = 1080
-VIDEO_HEIGHT = 1920
-
-# Background Mode
-BACKGROUND_MODE = "blur_image"  # Options: "solid", "blur_image"
-BACKGROUND_BLUR_RADIUS = 50  # Blur radius if BACKGROUND_MODE is "blur_image"
-BACKGROUND_IMAGE_FIT = "stretch" # Options: "stretch", "crop", "fill"
-
-# Centered image properties
-IMAGE_WIDTH_PERCENTAGE = 65
-IMAGE_CORNER_RADIUS = 30 # Set to 0 for no rounding.
-IMAGE_X_POSITION = -1 # Top-left corner X for the image (-1 for auto-center)
-IMAGE_Y_POSITION = -1 # Top-left corner Y for the image (-1 for auto-center)
-
-# Shadow properties (used for both main image and waveform if enabled)
-SHADOW_OFFSET_X = 10
-SHADOW_OFFSET_Y = 10
-SHADOW_BLUR_RADIUS = 15
-SHADOW_DARKNESS_FACTOR = 0.5 # For solid bg image shadow
-
-# Waveform Animation Properties
-WAVEFORM_ENABLED = True
-WAVEFORM_ANALYSIS_MODE = "melspectrogram" # Options: "rms", "melspectrogram"
-WAVEFORM_COLOR_MODE = "contrast"  # Options: "custom", "contrast", "white", "black"
-WAVEFORM_COLOR = (255, 255, 255) # (R, G, B) - Used if WAVEFORM_COLOR_MODE is "custom"
-WAVEFORM_HEIGHT_PERCENTAGE = 15
-WAVEFORM_BAR_COUNT = 50 # If melspectrogram, this is n_mels
-WAVEFORM_BAR_SPACING_RATIO = 0.2
-WAVEFORM_SMOOTHING_FACTOR = 0.35 # Applied to final band values if melspectrogram, or RMS if rms mode
-SPACING_IMAGE_WAVEFORM = 215 # Vertical spacing between image and waveform
-WAVEFORM_MIN_DB = -80.0 # For melspectrogram normalization
-WAVEFORM_MAX_DB = 0.0   # For melspectrogram normalization
-
 # --- Script Start --- #
 from PIL import Image, ImageDraw, ImageFilter, ImageStat
 import moviepy.editor as mpe
@@ -122,47 +76,47 @@ def get_waveform_contrast_color(bg_r, bg_g, bg_b):
     print(f"Using fallback black/white for waveform: {fallback_color}")
     return fallback_color
 
-def analyze_audio(audio_path, start_time, end_time, num_video_frames, video_fps):
-    print(f"Analyzing audio ({WAVEFORM_ANALYSIS_MODE} mode): {audio_path} from {start_time}s to {end_time}s for {num_video_frames} frames at {video_fps} FPS")
+def analyze_audio(audio_path, start_time, end_time, num_video_frames, video_fps, waveform_analysis_mode, waveform_bar_count, waveform_smoothing_factor, waveform_min_db, waveform_max_db):
+    print(f"Analyzing audio ({waveform_analysis_mode} mode): {audio_path} from {start_time}s to {end_time}s for {num_video_frames} frames at {video_fps} FPS")
     if not os.path.exists(audio_path):
         print("Audio file not found.")
-        return np.zeros((num_video_frames, WAVEFORM_BAR_COUNT)) if WAVEFORM_ANALYSIS_MODE == "melspectrogram" else np.zeros(num_video_frames)
+        return np.zeros((num_video_frames, waveform_bar_count)) if waveform_analysis_mode == "melspectrogram" else np.zeros(num_video_frames)
     try:
         y, sr = librosa.load(audio_path, sr=None, offset=start_time, duration=(end_time-start_time))
         if len(y) == 0:
             print("Warning: Loaded audio is empty.")
-            return np.zeros((num_video_frames, WAVEFORM_BAR_COUNT)) if WAVEFORM_ANALYSIS_MODE == "melspectrogram" else np.zeros(num_video_frames)
+            return np.zeros((num_video_frames, waveform_bar_count)) if waveform_analysis_mode == "melspectrogram" else np.zeros(num_video_frames)
         hop_length = int(sr / video_fps)
         if hop_length == 0: hop_length = int(sr / 24) if video_fps == 0 else 512 # fallback based on 24fps or fixed
-        if WAVEFORM_ANALYSIS_MODE == "melspectrogram":
+        if waveform_analysis_mode == "melspectrogram":
             n_fft = 2048 
-            mel_spec = librosa.feature.melspectrogram(y=y, sr=sr, n_fft=n_fft, hop_length=hop_length, n_mels=WAVEFORM_BAR_COUNT)
+            mel_spec = librosa.feature.melspectrogram(y=y, sr=sr, n_fft=n_fft, hop_length=hop_length, n_mels=waveform_bar_count)
             mel_spec_db = librosa.power_to_db(mel_spec, ref=np.max)
-            mel_spec_normalized = (mel_spec_db - WAVEFORM_MIN_DB) / (WAVEFORM_MAX_DB - WAVEFORM_MIN_DB)
+            mel_spec_normalized = (mel_spec_db - waveform_min_db) / (waveform_max_db - waveform_min_db)
             mel_spec_normalized = np.clip(mel_spec_normalized, 0, 1)
             processed_audio_data = mel_spec_normalized.T 
-            if WAVEFORM_SMOOTHING_FACTOR > 0 and processed_audio_data.shape[0] > 1:
+            if waveform_smoothing_factor > 0 and processed_audio_data.shape[0] > 1:
                 for i in range(processed_audio_data.shape[1]):
                     band_data = processed_audio_data[:, i]
                     smoothed_band = [band_data[0]]
                     for j in range(1, len(band_data)):
-                        smoothed_band.append(smoothed_band[-1] * WAVEFORM_SMOOTHING_FACTOR + band_data[j] * (1 - WAVEFORM_SMOOTHING_FACTOR))
+                        smoothed_band.append(smoothed_band[-1] * waveform_smoothing_factor + band_data[j] * (1 - waveform_smoothing_factor))
                     processed_audio_data[:, i] = np.array(smoothed_band)
-        elif WAVEFORM_ANALYSIS_MODE == "rms":
+        elif waveform_analysis_mode == "rms":
             frame_length = hop_length * 2 
             if frame_length == 0 : frame_length = 1024 
             rms = librosa.feature.rms(y=y, frame_length=frame_length, hop_length=hop_length)[0]
             rms_max = np.max(rms)
             rms_normalized = rms / rms_max if rms_max > 0 else np.zeros_like(rms)
-            if WAVEFORM_SMOOTHING_FACTOR > 0 and len(rms_normalized) > 1:
+            if waveform_smoothing_factor > 0 and len(rms_normalized) > 1:
                 rms_smoothed = [rms_normalized[0]]
                 for i in range(1, len(rms_normalized)):
-                    rms_smoothed.append(rms_smoothed[-1] * WAVEFORM_SMOOTHING_FACTOR + rms_normalized[i] * (1 - WAVEFORM_SMOOTHING_FACTOR))
+                    rms_smoothed.append(rms_smoothed[-1] * waveform_smoothing_factor + rms_normalized[i] * (1 - waveform_smoothing_factor))
                 rms_normalized = np.array(rms_smoothed)
-            processed_audio_data = np.tile(rms_normalized[:, np.newaxis], (1, WAVEFORM_BAR_COUNT))
+            processed_audio_data = np.tile(rms_normalized[:, np.newaxis], (1, waveform_bar_count))
         else:
-            print(f"Unknown WAVEFORM_ANALYSIS_MODE: {WAVEFORM_ANALYSIS_MODE}. Using zeros.")
-            return np.zeros((num_video_frames, WAVEFORM_BAR_COUNT))
+            print(f"Unknown waveform_analysis_mode: {waveform_analysis_mode}. Using zeros.")
+            return np.zeros((num_video_frames, waveform_bar_count))
         if processed_audio_data.shape[0] < num_video_frames:
             padding_shape = (num_video_frames - processed_audio_data.shape[0], processed_audio_data.shape[1])
             padding = np.zeros(padding_shape)
@@ -173,16 +127,16 @@ def analyze_audio(audio_path, start_time, end_time, num_video_frames, video_fps)
         return final_audio_data
     except Exception as e:
         print(f"Error analyzing audio: {e}")
-        return np.zeros((num_video_frames, WAVEFORM_BAR_COUNT)) if WAVEFORM_ANALYSIS_MODE == "melspectrogram" else np.zeros(num_video_frames)
+        return np.zeros((num_video_frames, waveform_bar_count)) if waveform_analysis_mode == "melspectrogram" else np.zeros(num_video_frames)
 
-def draw_waveform_bars(audio_frame_amplitudes, canvas_width, canvas_height, bar_color_tuple):
-    num_bars = WAVEFORM_BAR_COUNT
+def draw_waveform_bars(audio_frame_amplitudes, canvas_width, canvas_height, bar_color_tuple, waveform_bar_count, waveform_bar_spacing_ratio):
+    num_bars = waveform_bar_count
     if num_bars <= 0 or len(audio_frame_amplitudes) != num_bars: return None
     bars_canvas = Image.new("RGBA", (canvas_width, canvas_height), (0,0,0,0))
     draw_on_bars = ImageDraw.Draw(bars_canvas)
     total_slot_width = canvas_width / num_bars
-    bar_width = int(total_slot_width / (1 + WAVEFORM_BAR_SPACING_RATIO))
-    bar_spacing = int(bar_width * WAVEFORM_BAR_SPACING_RATIO)
+    bar_width = int(total_slot_width / (1 + waveform_bar_spacing_ratio))
+    bar_spacing = int(bar_width * waveform_bar_spacing_ratio)
     if bar_width < 1: bar_width = 1
     if bar_spacing < 0: bar_spacing = 0
     actual_waveform_width = num_bars * bar_width + max(0, num_bars - 1) * bar_spacing
@@ -197,96 +151,105 @@ def draw_waveform_bars(audio_frame_amplitudes, canvas_width, canvas_height, bar_
         current_x += (bar_width + bar_spacing)
     return bars_canvas
 
-BG_COLOR_SOLID_GLOBAL = (0,0,0)
-BLURRED_BG_IMAGE_GLOBAL = None
-CENTER_IMG_PROCESSED_GLOBAL = None
-CENTER_IMG_SHADOW_GLOBAL = None # For rounded shadow
-IMG_FINAL_WIDTH_GLOBAL, IMG_FINAL_HEIGHT_GLOBAL = 0, 0
-IMG_ACTUAL_POS_X_GLOBAL, IMG_ACTUAL_POS_Y_GLOBAL = 0, 0
-WAVEFORM_AREA_START_X_GLOBAL, WAVEFORM_AREA_TOP_Y_GLOBAL = 0,0
-WAVEFORM_AREA_WIDTH_GLOBAL, WAVEFORM_MAX_BAR_H_GLOBAL = 0,0
-AUDIO_AMPLITUDES_GLOBAL = None
+# Asset storage class to replace global variables
+class VideoAssets:
+    def __init__(self):
+        self.bg_color_solid = (0,0,0)
+        self.blurred_bg_image = None
+        self.center_img_processed = None
+        self.center_img_shadow = None  # For rounded shadow
+        self.img_final_width, self.img_final_height = 0, 0
+        self.img_actual_pos_x, self.img_actual_pos_y = 0, 0
+        self.waveform_area_start_x, self.waveform_area_top_y = 0, 0
+        self.waveform_area_width, self.waveform_max_bar_h = 0, 0
+        self.audio_amplitudes = None
 
-def precompute_assets():
-    global BG_COLOR_SOLID_GLOBAL, BLURRED_BG_IMAGE_GLOBAL, CENTER_IMG_PROCESSED_GLOBAL, CENTER_IMG_SHADOW_GLOBAL
-    global IMG_FINAL_WIDTH_GLOBAL, IMG_FINAL_HEIGHT_GLOBAL, IMG_ACTUAL_POS_X_GLOBAL, IMG_ACTUAL_POS_Y_GLOBAL
-    global WAVEFORM_AREA_START_X_GLOBAL, WAVEFORM_AREA_TOP_Y_GLOBAL, WAVEFORM_AREA_WIDTH_GLOBAL, WAVEFORM_MAX_BAR_H_GLOBAL
-    global AUDIO_AMPLITUDES_GLOBAL
+def precompute_assets(image_path, video_width, video_height, background_mode, background_image_fit, background_blur_radius,
+                   image_width_percentage, image_corner_radius, image_x_position, image_y_position,
+                   shadow_darkness_factor, shadow_blur_radius, waveform_enabled, waveform_height_percentage,
+                   spacing_image_waveform, audio_path, audio_start_time, audio_end_time, video_fps,
+                   waveform_analysis_mode, waveform_bar_count, waveform_smoothing_factor, waveform_min_db, waveform_max_db):
+    assets = VideoAssets()
     print("\n--- Pre-computing assets ---")
-    BG_COLOR_SOLID_GLOBAL = get_predominant_color(IMAGE_PATH)
-    if BACKGROUND_MODE == "blur_image" and os.path.exists(IMAGE_PATH):
+    assets.bg_color_solid = get_predominant_color(image_path)
+    if background_mode == "blur_image" and os.path.exists(image_path):
         try:
-            img_to_blur = Image.open(IMAGE_PATH).convert("RGB")
-            target_w, target_h = VIDEO_WIDTH, VIDEO_HEIGHT; img_w, img_h = img_to_blur.size
-            if BACKGROUND_IMAGE_FIT == "stretch": BLURRED_BG_IMAGE_GLOBAL = img_to_blur.resize((target_w, target_h), Image.Resampling.LANCZOS)
-            elif BACKGROUND_IMAGE_FIT == "fill" or BACKGROUND_IMAGE_FIT == "crop":
+            img_to_blur = Image.open(image_path).convert("RGB")
+            target_w, target_h = video_width, video_height; img_w, img_h = img_to_blur.size
+            if background_image_fit == "stretch": assets.blurred_bg_image = img_to_blur.resize((target_w, target_h), Image.Resampling.LANCZOS)
+            elif background_image_fit == "fill" or background_image_fit == "crop":
                 img_aspect = img_w / img_h; target_aspect = target_w / target_h
                 if img_aspect > target_aspect: new_h = target_h; new_w = int(new_h * img_aspect)
                 else: new_w = target_w; new_h = int(new_w / img_aspect)
                 resized_img = img_to_blur.resize((new_w, new_h), Image.Resampling.LANCZOS)
                 crop_x = (new_w - target_w) / 2; crop_y = (new_h - target_h) / 2
-                BLURRED_BG_IMAGE_GLOBAL = resized_img.crop((crop_x, crop_y, crop_x + target_w, crop_y + target_h))
-            else: BLURRED_BG_IMAGE_GLOBAL = img_to_blur.resize((target_w, target_h), Image.Resampling.LANCZOS)
-            BLURRED_BG_IMAGE_GLOBAL = BLURRED_BG_IMAGE_GLOBAL.filter(ImageFilter.GaussianBlur(BACKGROUND_BLUR_RADIUS))
-            print(f"Pre-computed blurred background: Fit='{BACKGROUND_IMAGE_FIT}', Radius={BACKGROUND_BLUR_RADIUS}")
-        except Exception as e: print(f"Error pre-computing blurred background: {e}"); BLURRED_BG_IMAGE_GLOBAL = None
-    if os.path.exists(IMAGE_PATH):
+                assets.blurred_bg_image = resized_img.crop((crop_x, crop_y, crop_x + target_w, crop_y + target_h))
+            else: assets.blurred_bg_image = img_to_blur.resize((target_w, target_h), Image.Resampling.LANCZOS)
+            assets.blurred_bg_image = assets.blurred_bg_image.filter(ImageFilter.GaussianBlur(background_blur_radius))
+            print(f"Pre-computed blurred background: Fit='{background_image_fit}', Radius={background_blur_radius}")
+        except Exception as e: print(f"Error pre-computing blurred background: {e}"); assets.blurred_bg_image = None
+    if os.path.exists(image_path):
         try:
-            img_orig = Image.open(IMAGE_PATH).convert("RGBA")
-            IMG_FINAL_WIDTH_GLOBAL = int(VIDEO_WIDTH * (IMAGE_WIDTH_PERCENTAGE / 100.0))
-            IMG_FINAL_HEIGHT_GLOBAL = int(IMG_FINAL_WIDTH_GLOBAL * (img_orig.height / img_orig.width))
-            img_resized = img_orig.resize((IMG_FINAL_WIDTH_GLOBAL, IMG_FINAL_HEIGHT_GLOBAL), Image.Resampling.LANCZOS)
-            CENTER_IMG_PROCESSED_GLOBAL = add_rounded_corners(img_resized, IMAGE_CORNER_RADIUS)
+            img_orig = Image.open(image_path).convert("RGBA")
+            assets.img_final_width = int(video_width * (image_width_percentage / 100.0))
+            assets.img_final_height = int(assets.img_final_width * (img_orig.height / img_orig.width))
+            img_resized = img_orig.resize((assets.img_final_width, assets.img_final_height), Image.Resampling.LANCZOS)
+            assets.center_img_processed = add_rounded_corners(img_resized, image_corner_radius)
             # Create rounded shadow based on the processed image's alpha
-            img_shadow_color_base = tuple(int(c * (1 - SHADOW_DARKNESS_FACTOR)) for c in BG_COLOR_SOLID_GLOBAL) if BACKGROUND_MODE == "solid" else (0,0,0)
+            img_shadow_color_base = tuple(int(c * (1 - shadow_darkness_factor)) for c in assets.bg_color_solid) if background_mode == "solid" else (0,0,0)
             shadow_color_rgba = img_shadow_color_base + (255,)
-            if 'A' in CENTER_IMG_PROCESSED_GLOBAL.getbands():
-                alpha_mask = CENTER_IMG_PROCESSED_GLOBAL.split()[3]
-                shadow_silhouette = Image.new("RGBA", CENTER_IMG_PROCESSED_GLOBAL.size, (0,0,0,0))
-                solid_shadow_img = Image.new("RGBA", CENTER_IMG_PROCESSED_GLOBAL.size, shadow_color_rgba)
+            if 'A' in assets.center_img_processed.getbands():
+                alpha_mask = assets.center_img_processed.split()[3]
+                shadow_silhouette = Image.new("RGBA", assets.center_img_processed.size, (0,0,0,0))
+                solid_shadow_img = Image.new("RGBA", assets.center_img_processed.size, shadow_color_rgba)
                 shadow_silhouette.paste(solid_shadow_img, mask=alpha_mask)
-                CENTER_IMG_SHADOW_GLOBAL = shadow_silhouette.filter(ImageFilter.GaussianBlur(SHADOW_BLUR_RADIUS))
-            print(f"Pre-processed main image & shadow: Size=({IMG_FINAL_WIDTH_GLOBAL}x{IMG_FINAL_HEIGHT_GLOBAL}), Radius={IMAGE_CORNER_RADIUS}")
-        except Exception as e: print(f"Error pre-processing main image/shadow: {e}"); CENTER_IMG_PROCESSED_GLOBAL = None; CENTER_IMG_SHADOW_GLOBAL = None
-    else: print(f"Main image {IMAGE_PATH} not found.")
-    IMG_ACTUAL_POS_X_GLOBAL = (VIDEO_WIDTH - IMG_FINAL_WIDTH_GLOBAL) // 2 if IMAGE_X_POSITION == -1 else IMAGE_X_POSITION
-    WAVEFORM_MAX_BAR_H_GLOBAL = int(VIDEO_HEIGHT * (WAVEFORM_HEIGHT_PERCENTAGE / 100.0)) if WAVEFORM_ENABLED else 0
-    total_content_height = IMG_FINAL_HEIGHT_GLOBAL + (SPACING_IMAGE_WAVEFORM + WAVEFORM_MAX_BAR_H_GLOBAL if WAVEFORM_ENABLED and WAVEFORM_MAX_BAR_H_GLOBAL > 0 else 0)
-    IMG_ACTUAL_POS_Y_GLOBAL = (VIDEO_HEIGHT - total_content_height) // 2 if IMAGE_Y_POSITION == -1 else IMAGE_Y_POSITION
-    WAVEFORM_AREA_TOP_Y_GLOBAL = IMG_ACTUAL_POS_Y_GLOBAL + IMG_FINAL_HEIGHT_GLOBAL + SPACING_IMAGE_WAVEFORM
-    WAVEFORM_AREA_WIDTH_GLOBAL = IMG_FINAL_WIDTH_GLOBAL
-    WAVEFORM_AREA_START_X_GLOBAL = IMG_ACTUAL_POS_X_GLOBAL
-    print(f"Image pos: X={IMG_ACTUAL_POS_X_GLOBAL}, Y={IMG_ACTUAL_POS_Y_GLOBAL}. Waveform top Y: {WAVEFORM_AREA_TOP_Y_GLOBAL}, spacing: {SPACING_IMAGE_WAVEFORM}")
-    video_duration = AUDIO_END_TIME - AUDIO_START_TIME; current_fps = VIDEO_FPS
+                assets.center_img_shadow = shadow_silhouette.filter(ImageFilter.GaussianBlur(shadow_blur_radius))
+            print(f"Pre-processed main image & shadow: Size=({assets.img_final_width}x{assets.img_final_height}), Radius={image_corner_radius}")
+        except Exception as e: print(f"Error pre-processing main image/shadow: {e}"); assets.center_img_processed = None; assets.center_img_shadow = None
+    else: print(f"Main image {image_path} not found.")
+    assets.img_actual_pos_x = (video_width - assets.img_final_width) // 2 if image_x_position == -1 else image_x_position
+    assets.waveform_max_bar_h = int(video_height * (waveform_height_percentage / 100.0)) if waveform_enabled else 0
+    total_content_height = assets.img_final_height + (spacing_image_waveform + assets.waveform_max_bar_h if waveform_enabled and assets.waveform_max_bar_h > 0 else 0)
+    assets.img_actual_pos_y = (video_height - total_content_height) // 2 if image_y_position == -1 else image_y_position
+    assets.waveform_area_top_y = assets.img_actual_pos_y + assets.img_final_height + spacing_image_waveform
+    assets.waveform_area_width = assets.img_final_width
+    assets.waveform_area_start_x = assets.img_actual_pos_x
+    print(f"Image pos: X={assets.img_actual_pos_x}, Y={assets.img_actual_pos_y}. Waveform top Y: {assets.waveform_area_top_y}, spacing: {spacing_image_waveform}")
+    video_duration = audio_end_time - audio_start_time; current_fps = video_fps
     if video_duration <= 0: video_duration = 1
     num_total_frames = int(video_duration * current_fps)
-    if WAVEFORM_ENABLED: AUDIO_AMPLITUDES_GLOBAL = analyze_audio(AUDIO_PATH, AUDIO_START_TIME, AUDIO_END_TIME, num_total_frames, current_fps)
+    if waveform_enabled: 
+        assets.audio_amplitudes = analyze_audio(audio_path, audio_start_time, audio_end_time, num_total_frames, current_fps,
+                                             waveform_analysis_mode, waveform_bar_count, waveform_smoothing_factor, 
+                                             waveform_min_db, waveform_max_db)
     print("--- Pre-computation finished ---")
+    return assets
 
-def make_frame_for_moviepy(t):
-    current_fps = VIDEO_FPS; frame_idx = int(t * current_fps)
+def make_frame_for_moviepy(t, assets, video_fps, video_width, video_height, background_mode, image_corner_radius,
+                         shadow_offset_x, shadow_offset_y, shadow_blur_radius, waveform_enabled, waveform_color_mode,
+                         waveform_color, waveform_bar_count, waveform_bar_spacing_ratio):
+    current_fps = video_fps; frame_idx = int(t * current_fps)
     if frame_idx % (current_fps * 5) == 0: print(f"Generating frame {frame_idx + 1} for time {t:.2f}s")
     current_frame_pil = None
-    if BACKGROUND_MODE == "blur_image" and BLURRED_BG_IMAGE_GLOBAL: current_frame_pil = BLURRED_BG_IMAGE_GLOBAL.copy()
-    else: current_frame_pil = Image.new("RGB", (VIDEO_WIDTH, VIDEO_HEIGHT), BG_COLOR_SOLID_GLOBAL)
-    if CENTER_IMG_SHADOW_GLOBAL:
-        shadow_rounded = add_rounded_corners(CENTER_IMG_SHADOW_GLOBAL, IMAGE_CORNER_RADIUS)
-        current_frame_pil.paste(CENTER_IMG_SHADOW_GLOBAL, (IMG_ACTUAL_POS_X_GLOBAL + SHADOW_OFFSET_X, IMG_ACTUAL_POS_Y_GLOBAL + SHADOW_OFFSET_Y), shadow_rounded)
-        # current_frame_pil.paste(CENTER_IMG_SHADOW_GLOBAL, (IMG_ACTUAL_POS_X_GLOBAL + SHADOW_OFFSET_X, IMG_ACTUAL_POS_Y_GLOBAL + SHADOW_OFFSET_Y), CENTER_IMG_SHADOW_GLOBAL)
-    if CENTER_IMG_PROCESSED_GLOBAL:
-        current_frame_pil.paste(CENTER_IMG_PROCESSED_GLOBAL, (IMG_ACTUAL_POS_X_GLOBAL, IMG_ACTUAL_POS_Y_GLOBAL), CENTER_IMG_PROCESSED_GLOBAL)
-    if WAVEFORM_ENABLED and AUDIO_AMPLITUDES_GLOBAL is not None and frame_idx < AUDIO_AMPLITUDES_GLOBAL.shape[0]:
-        current_audio_frame_data = AUDIO_AMPLITUDES_GLOBAL[frame_idx, :]
-        actual_wave_color = WAVEFORM_COLOR
-        if WAVEFORM_COLOR_MODE == "white": actual_wave_color = (255,255,255)
-        elif WAVEFORM_COLOR_MODE == "black": actual_wave_color = (0,0,0)
-        elif WAVEFORM_COLOR_MODE == "contrast":
+    if background_mode == "blur_image" and assets.blurred_bg_image: current_frame_pil = assets.blurred_bg_image.copy()
+    else: current_frame_pil = Image.new("RGB", (video_width, video_height), assets.bg_color_solid)
+    if assets.center_img_shadow:
+        shadow_rounded = add_rounded_corners(assets.center_img_shadow, image_corner_radius)
+        current_frame_pil.paste(assets.center_img_shadow, (assets.img_actual_pos_x + shadow_offset_x, assets.img_actual_pos_y + shadow_offset_y), shadow_rounded)
+    if assets.center_img_processed:
+        current_frame_pil.paste(assets.center_img_processed, (assets.img_actual_pos_x, assets.img_actual_pos_y), assets.center_img_processed)
+    if waveform_enabled and assets.audio_amplitudes is not None and frame_idx < assets.audio_amplitudes.shape[0]:
+        current_audio_frame_data = assets.audio_amplitudes[frame_idx, :]
+        actual_wave_color = waveform_color
+        if waveform_color_mode == "white": actual_wave_color = (255,255,255)
+        elif waveform_color_mode == "black": actual_wave_color = (0,0,0)
+        elif waveform_color_mode == "contrast":
             try:
-                wave_bg_box = (WAVEFORM_AREA_START_X_GLOBAL, WAVEFORM_AREA_TOP_Y_GLOBAL, 
-                               WAVEFORM_AREA_START_X_GLOBAL + WAVEFORM_AREA_WIDTH_GLOBAL, 
-                               WAVEFORM_AREA_TOP_Y_GLOBAL + WAVEFORM_MAX_BAR_H_GLOBAL)
+                wave_bg_box = (assets.waveform_area_start_x, assets.waveform_area_top_y, 
+                               assets.waveform_area_start_x + assets.waveform_area_width, 
+                               assets.waveform_area_top_y + assets.waveform_max_bar_h)
                 wave_bg_box = (max(0, wave_bg_box[0]), max(0, wave_bg_box[1]), 
-                               min(VIDEO_WIDTH, wave_bg_box[2]), min(VIDEO_HEIGHT, wave_bg_box[3]))
+                               min(video_width, wave_bg_box[2]), min(video_height, wave_bg_box[3]))
                 if wave_bg_box[2] > wave_bg_box[0] and wave_bg_box[3] > wave_bg_box[1]:
                     waveform_bg_crop = current_frame_pil.crop(wave_bg_box).convert("RGB")
                     avg_color_bg = tuple(int(c) for c in ImageStat.Stat(waveform_bg_crop).mean)
@@ -294,49 +257,163 @@ def make_frame_for_moviepy(t):
                     if frame_idx == 0: print(f"Waveform contrast color: {actual_wave_color} against bg avg: {avg_color_bg}")
                 else: 
                     if frame_idx == 0: print("Warning: Invalid crop area for waveform contrast. Defaulting color.")
-                    actual_wave_color = get_waveform_contrast_color(BG_COLOR_SOLID_GLOBAL[0],BG_COLOR_SOLID_GLOBAL[1],BG_COLOR_SOLID_GLOBAL[2])
+                    actual_wave_color = get_waveform_contrast_color(assets.bg_color_solid[0], assets.bg_color_solid[1], assets.bg_color_solid[2])
             except Exception as e_contrast:
                 if frame_idx == 0: print(f"Error in contrast color: {e_contrast}. Defaulting.")
                 actual_wave_color = (255,255,255)
-        bars_canvas = draw_waveform_bars(current_audio_frame_data, WAVEFORM_AREA_WIDTH_GLOBAL, WAVEFORM_MAX_BAR_H_GLOBAL, actual_wave_color)
+        bars_canvas = draw_waveform_bars(current_audio_frame_data, assets.waveform_area_width, assets.waveform_max_bar_h, 
+                                       actual_wave_color, waveform_bar_count, waveform_bar_spacing_ratio)
         if bars_canvas:
             wave_shadow_color_rgba = (0,0,0, 180) 
             if 'A' in bars_canvas.getbands():
                 bars_alpha_mask = bars_canvas.split()[3]
                 wave_shadow_sil = Image.new("RGBA", bars_canvas.size, (0,0,0,0))
                 wave_shadow_sil.paste(Image.new("RGBA", bars_canvas.size, wave_shadow_color_rgba), mask=bars_alpha_mask)
-                wave_shadow_blur = wave_shadow_sil.filter(ImageFilter.GaussianBlur(SHADOW_BLUR_RADIUS))
-                current_frame_pil.paste(wave_shadow_blur, (WAVEFORM_AREA_START_X_GLOBAL + SHADOW_OFFSET_X, WAVEFORM_AREA_TOP_Y_GLOBAL + SHADOW_OFFSET_Y), wave_shadow_blur)
-            current_frame_pil.paste(bars_canvas, (WAVEFORM_AREA_START_X_GLOBAL, WAVEFORM_AREA_TOP_Y_GLOBAL), bars_canvas)
+                wave_shadow_blur = wave_shadow_sil.filter(ImageFilter.GaussianBlur(shadow_blur_radius))
+                current_frame_pil.paste(wave_shadow_blur, (assets.waveform_area_start_x + shadow_offset_x, assets.waveform_area_top_y + shadow_offset_y), wave_shadow_blur)
+            current_frame_pil.paste(bars_canvas, (assets.waveform_area_start_x, assets.waveform_area_top_y), bars_canvas)
     return np.array(current_frame_pil)
 
 if __name__ == "__main__":
+    # Sample configuration for creating a YouTube Short
+    # Image settings
+    IMAGE_PATH = "/Users/josecosta/Downloads/ChatGPT Image Apr 29, 2025, 07_20_12 PM.png"
+    IMAGE_WIDTH_PERCENTAGE = 65
+    IMAGE_CORNER_RADIUS = 30  # Set to 0 for no rounding
+    IMAGE_X_POSITION = -1  # -1 for auto-center
+    IMAGE_Y_POSITION = -1  # -1 for auto-center
+    
+    # Audio settings
+    AUDIO_PATH = "/Users/josecosta/Downloads/Beast of Destruction v2.wav"
+    AUDIO_START_TIME = 33  # Start time of the audio in seconds
+    AUDIO_END_TIME = 86  # End time of the audio in seconds (also dictates video duration)
+    
+    # Video settings
+    VIDEO_FPS = 60
+    OUTPUT_VIDEO_FILENAME = "youtube_short_final_v6.mp4"
+    VIDEO_WIDTH = 1080
+    VIDEO_HEIGHT = 1920
+    
+    # Background settings
+    BACKGROUND_MODE = "blur_image"  # Options: "solid", "blur_image"
+    BACKGROUND_BLUR_RADIUS = 50  # Blur radius if BACKGROUND_MODE is "blur_image"
+    BACKGROUND_IMAGE_FIT = "stretch"  # Options: "stretch", "crop", "fill"
+    
+    # Shadow properties
+    SHADOW_OFFSET_X = 10
+    SHADOW_OFFSET_Y = 10
+    SHADOW_BLUR_RADIUS = 15
+    SHADOW_DARKNESS_FACTOR = 0.5  # For solid bg image shadow
+    
+    # Waveform Animation Properties
+    WAVEFORM_ENABLED = True
+    WAVEFORM_ANALYSIS_MODE = "melspectrogram"  # Options: "rms", "melspectrogram"
+    WAVEFORM_COLOR_MODE = "contrast"  # Options: "custom", "contrast", "white", "black"
+    WAVEFORM_COLOR = (255, 255, 255)  # (R, G, B) - Used if WAVEFORM_COLOR_MODE is "custom"
+    WAVEFORM_HEIGHT_PERCENTAGE = 15
+    WAVEFORM_BAR_COUNT = 50  # If melspectrogram, this is n_mels
+    WAVEFORM_BAR_SPACING_RATIO = 0.2
+    WAVEFORM_SMOOTHING_FACTOR = 0.35  # Applied to final band values if melspectrogram, or RMS if rms mode
+    SPACING_IMAGE_WAVEFORM = 215  # Vertical spacing between image and waveform
+    WAVEFORM_MIN_DB = -80.0  # For melspectrogram normalization
+    WAVEFORM_MAX_DB = 0.0  # For melspectrogram normalization
+    
     print(f"Starting YouTube Shorts script (v6 - User Prefs & New Contrast)...")
-    precompute_assets()
+    
+    # Precompute all assets
+    assets = precompute_assets(
+        image_path=IMAGE_PATH,
+        video_width=VIDEO_WIDTH,
+        video_height=VIDEO_HEIGHT,
+        background_mode=BACKGROUND_MODE,
+        background_image_fit=BACKGROUND_IMAGE_FIT,
+        background_blur_radius=BACKGROUND_BLUR_RADIUS,
+        image_width_percentage=IMAGE_WIDTH_PERCENTAGE,
+        image_corner_radius=IMAGE_CORNER_RADIUS,
+        image_x_position=IMAGE_X_POSITION,
+        image_y_position=IMAGE_Y_POSITION,
+        shadow_darkness_factor=SHADOW_DARKNESS_FACTOR,
+        shadow_blur_radius=SHADOW_BLUR_RADIUS,
+        waveform_enabled=WAVEFORM_ENABLED,
+        waveform_height_percentage=WAVEFORM_HEIGHT_PERCENTAGE,
+        spacing_image_waveform=SPACING_IMAGE_WAVEFORM,
+        audio_path=AUDIO_PATH,
+        audio_start_time=AUDIO_START_TIME,
+        audio_end_time=AUDIO_END_TIME,
+        video_fps=VIDEO_FPS,
+        waveform_analysis_mode=WAVEFORM_ANALYSIS_MODE,
+        waveform_bar_count=WAVEFORM_BAR_COUNT,
+        waveform_smoothing_factor=WAVEFORM_SMOOTHING_FACTOR,
+        waveform_min_db=WAVEFORM_MIN_DB,
+        waveform_max_db=WAVEFORM_MAX_DB
+    )
+    
+    # Create frame maker function with closure for all parameters
+    def frame_maker(t):
+        return make_frame_for_moviepy(
+            t=t,
+            assets=assets,
+            video_fps=VIDEO_FPS,
+            video_width=VIDEO_WIDTH,
+            video_height=VIDEO_HEIGHT,
+            background_mode=BACKGROUND_MODE,
+            image_corner_radius=IMAGE_CORNER_RADIUS,
+            shadow_offset_x=SHADOW_OFFSET_X,
+            shadow_offset_y=SHADOW_OFFSET_Y,
+            shadow_blur_radius=SHADOW_BLUR_RADIUS,
+            waveform_enabled=WAVEFORM_ENABLED,
+            waveform_color_mode=WAVEFORM_COLOR_MODE,
+            waveform_color=WAVEFORM_COLOR,
+            waveform_bar_count=WAVEFORM_BAR_COUNT,
+            waveform_bar_spacing_ratio=WAVEFORM_BAR_SPACING_RATIO
+        )
+    
     video_duration = AUDIO_END_TIME - AUDIO_START_TIME
     if video_duration <= 0: video_duration = 1
-    current_fps = VIDEO_FPS
-    print(f"Target video duration: {video_duration}s, FPS: {current_fps}")
-    video_clip = mpe.VideoClip(make_frame_for_moviepy, duration=video_duration)
+    print(f"Target video duration: {video_duration}s, FPS: {VIDEO_FPS}")
+    
+    # Create video clip with our frame maker function
+    video_clip = mpe.VideoClip(frame_maker, duration=video_duration)
+    
+    # Add audio if available
     if os.path.exists(AUDIO_PATH):
         print(f"Reading audio: {AUDIO_PATH}")
         try:
             main_audio_clip = mpe.AudioFileClip(AUDIO_PATH)
             actual_start = min(max(0, AUDIO_START_TIME), main_audio_clip.duration)
             actual_end = min(max(actual_start, AUDIO_END_TIME), main_audio_clip.duration)
-            if actual_start >= actual_end: print("Warning: Invalid audio trim. No audio."); video_clip = video_clip.set_audio(None)
+            if actual_start >= actual_end: 
+                print("Warning: Invalid audio trim. No audio.")
+                video_clip = video_clip.set_audio(None)
             else:
                 trimmed_audio = main_audio_clip.subclip(actual_start, actual_end)
-                if trimmed_audio.duration < video_clip.duration: video_clip = video_clip.set_duration(trimmed_audio.duration)
-                elif trimmed_audio.duration > video_clip.duration: trimmed_audio = trimmed_audio.set_duration(video_clip.duration)
+                if trimmed_audio.duration < video_clip.duration:
+                    video_clip = video_clip.set_duration(trimmed_audio.duration)
+                elif trimmed_audio.duration > video_clip.duration:
+                    trimmed_audio = trimmed_audio.set_duration(video_clip.duration)
                 video_clip = video_clip.set_audio(trimmed_audio)
                 print(f"Audio set. Final duration: {video_clip.duration:.2f}s.")
-        except Exception as e: print(f"Error processing audio {AUDIO_PATH}: {e}. No audio."); video_clip = video_clip.set_audio(None)
-    else: print(f"Audio {AUDIO_PATH} not found. No audio."); video_clip = video_clip.set_audio(None)
+        except Exception as e: 
+            print(f"Error processing audio {AUDIO_PATH}: {e}. No audio.")
+            video_clip = video_clip.set_audio(None)
+    else: 
+        print(f"Audio {AUDIO_PATH} not found. No audio.")
+        video_clip = video_clip.set_audio(None)
+    
+    # Write the final video file
     print(f"\nWriting video: {OUTPUT_VIDEO_FILENAME}")
     try:
-        video_clip.write_videofile(OUTPUT_VIDEO_FILENAME, fps=current_fps, codec="libx264", audio_codec="aac", threads=4, logger='bar')
+        video_clip.write_videofile(
+            OUTPUT_VIDEO_FILENAME, 
+            fps=VIDEO_FPS, 
+            codec="libx264", 
+            audio_codec="aac", 
+            threads=4, 
+            logger='bar'
+        )
         print(f"Successfully created: {OUTPUT_VIDEO_FILENAME}")
-    except Exception as e: print(f"Error writing video: {e}")
+    except Exception as e: 
+        print(f"Error writing video: {e}")
+    
     print("\nScript finished.")
 
