@@ -34,6 +34,10 @@ def generate_video(params):
         output_dir = os.path.dirname(os.path.join(script_dir, params["OUTPUT_VIDEO_FILENAME"]))
         os.makedirs(output_dir, exist_ok=True)
         
+        # Ensure audio times are valid numbers
+        audio_start_time_sec = max(0, params["AUDIO_START_TIME"])
+        audio_end_time_sec = max(audio_start_time_sec + 1, params["AUDIO_END_TIME"])
+        
         # Call the precompute_assets function from main.py with all necessary parameters
         assets = video_generation.precompute_assets(
             image_path=params["IMAGE_PATH"],
@@ -52,8 +56,8 @@ def generate_video(params):
             waveform_height_percentage=params["WAVEFORM_HEIGHT_PERCENTAGE"],
             spacing_image_waveform=params["SPACING_IMAGE_WAVEFORM"],
             audio_path=params["AUDIO_PATH"],
-            audio_start_time=params["AUDIO_START_TIME"],
-            audio_end_time=params["AUDIO_END_TIME"],
+            audio_start_time=audio_start_time_sec,
+            audio_end_time=audio_end_time_sec,
             video_fps=params["VIDEO_FPS"],
             waveform_analysis_mode=params["WAVEFORM_ANALYSIS_MODE"],
             waveform_bar_count=params["WAVEFORM_BAR_COUNT"],
@@ -166,11 +170,37 @@ with tab_input:
         else:
             audio_path = ""
     
-    audio_start_time = st.slider("Audio Start Time (seconds)", 0, 300, 33, 
-                               help="Start time of the audio in seconds")
+    # Time input in MM:SS format
+    audio_start_time_str = st.text_input("Audio Start Time (MM:SS)", "00:33", 
+                                      help="Start time of the audio in MM:SS format")
     
-    audio_end_time = st.slider("Audio End Time (seconds)", 1, 300, 86, 
-                             help="End time of the audio in seconds (also dictates video duration)")
+    audio_end_time_str = st.text_input("Audio End Time (MM:SS)", "01:26", 
+                                    help="End time of the audio in MM:SS format (also dictates video duration)")
+    
+    # Convert MM:SS to seconds
+    def time_str_to_seconds(time_str):
+        try:
+            # Handle different formats
+            if ":" in time_str:
+                parts = time_str.split(":")
+                if len(parts) == 2:  # MM:SS
+                    minutes, seconds = parts
+                    return int(minutes) * 60 + int(seconds)
+                elif len(parts) == 3:  # HH:MM:SS
+                    hours, minutes, seconds = parts
+                    return int(hours) * 3600 + int(minutes) * 60 + int(seconds)
+            # Handle direct seconds input
+            return int(time_str)
+        except ValueError:
+            return 0  # Default to 0 if parsing fails
+    
+    # Convert input strings to seconds
+    audio_start_time = time_str_to_seconds(audio_start_time_str)
+    audio_end_time = time_str_to_seconds(audio_end_time_str)
+    
+    # Display the converted values
+    st.caption(f"Start time in seconds: {audio_start_time}")
+    st.caption(f"End time in seconds: {audio_end_time}")
     
     output_filename = st.text_input("Output Video Filename", "youtube_short.mp4", 
                                   help="Name of the output video file")
@@ -179,18 +209,15 @@ with tab_input:
 with tab_video:
     st.header("Video Settings")
     
-    col1, col2 = st.columns(2)
+    # Single column layout for better vertical alignment
+    video_fps = st.number_input("Video FPS", 24, 60, 60, 
+                        help="Frames per second for the output video")
     
-    with col1:
-        video_fps = st.slider("Video FPS", 24, 60, 60, 
-                            help="Frames per second for the output video")
-    
-    with col2:
-        st.markdown("Video Dimensions (9:16 aspect ratio for YouTube Shorts)")
-        video_width = st.number_input("Video Width", 360, 1920, 1080, 
-                                    help="Width of the output video")
-        video_height = st.number_input("Video Height", 640, 3840, 1920, 
-                                     help="Height of the output video")
+    st.markdown("Video Dimensions (9:16 aspect ratio for YouTube Shorts)")
+    video_width = st.number_input("Video Width", 360, 1920, 1080, 
+                                help="Width of the output video")
+    video_height = st.number_input("Video Height", 640, 3840, 1920, 
+                                 help="Height of the output video")
 
 # Background settings
 with tab_background:
@@ -201,8 +228,8 @@ with tab_background:
                                  help="Options: 'solid', 'blur_image'")
     
     if background_mode == "blur_image":
-        background_blur_radius = st.slider("Background Blur Radius", 10, 100, 50, 
-                                         help="Blur radius if BACKGROUND_MODE is 'blur_image'")
+        background_blur_radius = st.number_input("Background Blur Radius", 10, 100, 50, 
+                                          help="Blur radius if BACKGROUND_MODE is 'blur_image'")
         
         background_image_fit = st.selectbox("Background Image Fit", 
                                           ["stretch", "crop", "fill"], 
@@ -215,11 +242,11 @@ with tab_background:
 with tab_image:
     st.header("Image Settings")
     
-    image_width_percentage = st.slider("Image Width Percentage", 10, 100, 65, 
-                                     help="Width of the image as a percentage of the video width")
+    image_width_percentage = st.number_input("Image Width Percentage", 10, 100, 65, 
+                                      help="Width of the image as a percentage of the video width")
     
-    image_corner_radius = st.slider("Image Corner Radius", 0, 100, 30, 
-                                  help="Set to 0 for no rounding")
+    image_corner_radius = st.number_input("Image Corner Radius", 0, 100, 30, 
+                                   help="Set to 0 for no rounding")
     
     col1, col2 = st.columns(2)
     
@@ -247,53 +274,65 @@ with tab_image:
         shadow_blur_radius = st.number_input("Shadow Blur Radius", 0, 50, 15, 
                                            help="Blur radius for shadow")
     
-    shadow_darkness_factor = st.slider("Shadow Darkness Factor", 0.0, 1.0, 0.5, 
-                                     help="For solid bg image shadow")
+    shadow_darkness_factor = st.number_input("Shadow Darkness Factor", 0.0, 1.0, 0.5, step=0.01, 
+                                      help="For solid bg image shadow")
 
 # Waveform settings
 with tab_waveform:
     st.header("Waveform Animation Settings")
     
     waveform_enabled = st.checkbox("Enable Waveform", True, 
-                                 help="Whether to show the audio waveform visualization")
+                                  help="Whether to show the audio waveform visualization")
+    
+    # Initialize default values for waveform-related variables
+    waveform_analysis_mode = "melspectrogram"
+    waveform_color_mode = "contrast"
+    waveform_color = "#FFFFFF"
+    waveform_height_percentage = 15
+    waveform_bar_count = 50
+    waveform_bar_spacing_ratio = 0.2
+    waveform_smoothing_factor = 0.35
+    spacing_image_waveform = 215
+    waveform_min_db = -80.0
+    waveform_max_db = 0.0
     
     if waveform_enabled:
         waveform_analysis_mode = st.selectbox("Waveform Analysis Mode", 
-                                            ["melspectrogram", "rms"], 
-                                            help="Options: 'rms', 'melspectrogram'")
+                                             ["melspectrogram", "rms"], 
+                                             help="Options: 'rms', 'melspectrogram'")
         
         waveform_color_mode = st.selectbox("Waveform Color Mode", 
-                                         ["contrast", "custom", "white", "black"], 
-                                         help="Options: 'custom', 'contrast', 'white', 'black'")
+                                          ["contrast", "custom", "white", "black"], 
+                                          help="Options: 'custom', 'contrast', 'white', 'black'")
         
         if waveform_color_mode == "custom":
             waveform_color = st.color_picker("Waveform Color", "#FFFFFF", 
-                                           help="(R, G, B) - Used if WAVEFORM_COLOR_MODE is 'custom'")
+                                            help="(R, G, B) - Used if WAVEFORM_COLOR_MODE is 'custom'")
         
-        waveform_height_percentage = st.slider("Waveform Height Percentage", 5, 50, 15, 
-                                             help="Height of the waveform as a percentage of the video height")
+        waveform_height_percentage = st.number_input("Waveform Height Percentage", 5, 50, 15, 
+                                              help="Height of the waveform as a percentage of the video height")
         
-        waveform_bar_count = st.slider("Waveform Bar Count", 10, 100, 50, 
-                                     help="If melspectrogram, this is n_mels")
+        waveform_bar_count = st.number_input("Waveform Bar Count", 10, 100, 50, 
+                                      help="If melspectrogram, this is n_mels")
         
-        waveform_bar_spacing_ratio = st.slider("Waveform Bar Spacing Ratio", 0.0, 1.0, 0.2, 
-                                             help="Spacing between waveform bars")
+        waveform_bar_spacing_ratio = st.number_input("Waveform Bar Spacing Ratio", 0.0, 1.0, 0.2, step=0.01, 
+                                              help="Spacing between waveform bars")
         
-        waveform_smoothing_factor = st.slider("Waveform Smoothing Factor", 0.0, 1.0, 0.35, 
-                                            help="Applied to final band values if melspectrogram, or RMS if rms mode")
+        waveform_smoothing_factor = st.number_input("Waveform Smoothing Factor", 0.0, 1.0, 0.35, step=0.01, 
+                                             help="Applied to final band values if melspectrogram, or RMS if rms mode")
         
-        spacing_image_waveform = st.slider("Spacing Between Image and Waveform", 50, 500, 215, 
-                                         help="Vertical spacing between image and waveform")
+        spacing_image_waveform = st.number_input("Spacing Between Image and Waveform", 50, 500, 215, 
+                                          help="Vertical spacing between image and waveform")
         
         col1, col2 = st.columns(2)
         
         with col1:
-            waveform_min_db = st.slider("Waveform Min dB", -100.0, 0.0, -80.0, 
-                                      help="For melspectrogram normalization")
+            waveform_min_db = st.number_input("Waveform Min dB", -100.0, 0.0, -80.0, step=0.1, 
+                                       help="For melspectrogram normalization")
         
         with col2:
-            waveform_max_db = st.slider("Waveform Max dB", -50.0, 0.0, 0.0, 
-                                      help="For melspectrogram normalization")
+            waveform_max_db = st.number_input("Waveform Max dB", -50.0, 0.0, 0.0, step=0.1, 
+                                       help="For melspectrogram normalization")
 
 # Generate video
 with tab_generate:
@@ -311,10 +350,10 @@ with tab_generate:
             else:
                 bg_color = (0, 0, 0)  # Default
                 
-            if waveform_color_mode == "custom":
+            # Process waveform color
+            waveform_color_tuple = (255, 255, 255)  # Default
+            if waveform_enabled and waveform_color_mode == "custom":
                 waveform_color_tuple = tuple(int(waveform_color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
-            else:
-                waveform_color_tuple = (255, 255, 255)  # Default
                 
             # Prepare parameters for the main script
             params = {
@@ -375,28 +414,4 @@ with tab_generate:
                 else:
                     st.error(result.stderr)
 
-st.sidebar.title("About")
-st.sidebar.info(
-    """
-    This app allows you to create YouTube Shorts videos with audio visualization.
-    
-    Upload an image and audio file, configure the settings, and generate your video!
-    
-    Based on the YouTube Shorts Generator script.
-    """
-)
-
-# Requirements note
-st.sidebar.title("Requirements")
-st.sidebar.markdown(
-    """
-    This app requires the following Python packages:
-    - streamlit
-    - PIL (Pillow)
-    - moviepy
-    - numpy
-    - librosa
-    
-    Make sure they are installed in your environment.
-    """
-)
+# Removed sidebar
