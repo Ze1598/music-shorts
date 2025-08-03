@@ -1,0 +1,113 @@
+# Video Profiles Configuration
+# Default settings for YouTube Shorts Generator
+
+default_profile:
+  display_name: "Shorts with waveform"
+  
+  # Input/Output Settings
+  input_output:
+    audio_start_time: "00:33"  # MM:SS format
+    audio_end_time: "01:26"    # MM:SS format
+    output_filename: "youtube_short.mp4"
+    use_audio_duration: false
+  
+  # Video Settings
+  video:
+    fps: 60
+    width: 1080
+    height: 1920
+    aspect_ratio: "9:16"  # YouTube Shorts standard
+  
+  # Background Settings
+  background:
+    mode: "blur_image"  # Options: "blur_image", "solid"
+    blur_radius: 50     # Used when mode is "blur_image"
+    image_fit: "stretch"  # Options: "stretch", "crop", "fill"
+    color: "#000000"    # Used when mode is "solid"
+  
+  # Image Settings
+  image:
+    width_percentage: 65
+    corner_radius: 30
+    x_position: -1      # -1 for auto-center
+    y_position: -1      # -1 for auto-center
+  
+  # Shadow Settings
+  shadow:
+    offset_x: 10
+    offset_y: 10
+    blur_radius: 15
+    darkness_factor: 0.5
+  
+  # Waveform Settings
+  waveform:
+    enabled: true
+    analysis_mode: "melspectrogram"  # Options: "melspectrogram", "rms"
+    color_mode: "contrast"           # Options: "contrast", "custom", "white", "black"
+    color: "#FFFFFF"                 # Used when color_mode is "custom"
+    height_percentage: 15
+    bar_count: 50
+    bar_spacing_ratio: 0.2
+    smoothing_factor: 0.35
+    spacing_from_image: 215
+    min_db: -80.0
+    max_db: 0.0
+
+visualizer_profile:
+  display_name: "Visualizer with waveform"
+  
+  # Input/Output Settings
+  input_output:
+    audio_start_time: "00:33"  # MM:SS format
+    audio_end_time: "01:26"    # MM:SS format
+    output_filename: "youtube_short.mp4"
+    use_audio_duration: true
+  
+  # Video Settings
+  video:
+    fps: 60
+    width: 1920
+    height: 1080
+    aspect_ratio: "16:9"  # Standard landscape format
+  
+  # Background Settings
+  background:
+    mode: "blur_image"  # Options: "blur_image", "solid"
+    blur_radius: 50     # Used when mode is "blur_image"
+    image_fit: "stretch"  # Options: "stretch", "crop", "fill"
+    color: "#000000"    # Used when mode is "solid"
+  
+  # Image Settings
+  image:
+    width_percentage: 25
+    corner_radius: 30
+    x_position: -1      # -1 for auto-center
+    y_position: -1      # -1 for auto-center
+  
+  # Shadow Settings
+  shadow:
+    offset_x: 10
+    offset_y: 10
+    blur_radius: 15
+    darkness_factor: 0.5
+  
+  # Waveform Settings
+  waveform:
+    enabled: true
+    analysis_mode: "melspectrogram"  # Options: "melspectrogram", "rms"
+    color_mode: "contrast"           # Options: "contrast", "custom", "white", "black"
+    color: "#FFFFFF"                 # Used when color_mode is "custom"
+    height_percentage: 15
+    bar_count: 50
+    bar_spacing_ratio: 0.3
+    smoothing_factor: 0.35
+    spacing_from_image: 175
+    min_db: -80.0
+    max_db: 0.0
+
+# Future profiles can be added here
+# Example:
+# music_video_profile:
+#   # Different settings for music videos
+# podcast_profile:
+#   # Different settings for podcast visualizations
