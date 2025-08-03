@@ -5,6 +5,7 @@ from pathlib import Path
 import shutil
 import sys
 import importlib
+import yaml
 
 # Import main module and its functions
 import video_generation
@@ -19,6 +20,38 @@ st.set_page_config(
 
 st.title("YouTube Shorts Generator")
 st.markdown("Create beautiful music visualization videos for YouTube Shorts")
+
+# Load video profiles
+@st.cache_data
+def load_video_profiles():
+    try:
+        with open('video_profiles.yaml', 'r') as file:
+            return yaml.safe_load(file)
+    except FileNotFoundError:
+        st.error("video_profiles.yaml not found")
+        return {}
+    except yaml.YAMLError as e:
+        st.error(f"Error loading video profiles: {e}")
+        return {}
+
+profiles = load_video_profiles()
+
+# Helper function to get profile values
+def get_profile_value(profile_key, path, default=None):
+    """Get a value from the selected profile using dot notation path"""
+    if not profiles or profile_key not in profiles:
+        return default
+    
+    profile = profiles[profile_key]
+    keys = path.split('.')
+    value = profile
+    
+    try:
+        for key in keys:
+            value = value[key]
+        return value
+    except (KeyError, TypeError):
+        return default
 
 # Create tabs for different sections
 tab_input, tab_video, tab_background, tab_image, tab_waveform, tab_generate = st.tabs([
@@ -170,12 +203,82 @@ with tab_input:
         else:
             audio_path = ""
     
+    # Profile selection dropdown
+    st.subheader("Video Profile")
+    profile_options = []
+    profile_keys = []
+    
+    if profiles:
+        for key, profile in profiles.items():
+            if 'display_name' in profile:
+                profile_options.append(profile['display_name'])
+                profile_keys.append(key)
+    
+    # Default to "Shorts with waveform" (default_profile)
+    default_index = 0
+    if 'default_profile' in profile_keys:
+        default_index = profile_keys.index('default_profile')
+    
+    selected_profile_display = st.selectbox(
+        "Choose a video profile",
+        profile_options,
+        index=default_index,
+        help="Select a pre-configured profile to populate settings automatically"
+    )
+    
+    # Get the selected profile key
+    selected_profile_key = None
+    if selected_profile_display in profile_options:
+        selected_profile_key = profile_keys[profile_options.index(selected_profile_display)]
+    
+    # Auto-calculate video length checkbox
+    default_use_audio_duration = get_profile_value(selected_profile_key, 'input_output.use_audio_duration', False)
+    use_audio_duration = st.checkbox("Auto-calculate video length from audio duration", default_use_audio_duration,
+                                    help="When enabled, automatically sets start time to 0 and end time to the full audio duration")
+    
     # Time input in MM:SS format
-    audio_start_time_str = st.text_input("Audio Start Time (MM:SS)", "00:33", 
+    default_start_time = get_profile_value(selected_profile_key, 'input_output.audio_start_time', "00:33")
+    default_end_time = get_profile_value(selected_profile_key, 'input_output.audio_end_time', "01:26")
+    
+    # Initialize session state for time values if not exists
+    if 'audio_start_time_str' not in st.session_state:
+        st.session_state.audio_start_time_str = default_start_time
+    if 'audio_end_time_str' not in st.session_state:
+        st.session_state.audio_end_time_str = default_end_time
+    
+    # Update session state when profile changes (only if profile selection actually changed)
+    current_profile_key = f"profile_{selected_profile_key}"
+    if current_profile_key not in st.session_state or st.session_state[current_profile_key] != selected_profile_key:
+        st.session_state[current_profile_key] = selected_profile_key
+        st.session_state.audio_start_time_str = default_start_time
+        st.session_state.audio_end_time_str = default_end_time
+    
+    # Calculate auto duration if enabled and audio is uploaded
+    if use_audio_duration and uploaded_audio and audio_path:
+        try:
+            import librosa
+            audio_duration = librosa.get_duration(path=audio_path)
+            minutes = int(audio_duration // 60)
+            seconds = int(audio_duration % 60)
+            calculated_start_time = "00:00"
+            calculated_end_time = f"{minutes:02d}:{seconds:02d}"
+            st.info(f"Auto-calculated duration: {calculated_end_time} (from audio file)")
+            # Update session state with calculated values
+            st.session_state.audio_start_time_str = calculated_start_time
+            st.session_state.audio_end_time_str = calculated_end_time
+        except Exception as e:
+            st.warning(f"Could not calculate audio duration: {e}")
+    
+    # Always show editable time input fields using session state values
+    audio_start_time_str = st.text_input("Audio Start Time (MM:SS)", st.session_state.audio_start_time_str, 
                                       help="Start time of the audio in MM:SS format")
     
-    audio_end_time_str = st.text_input("Audio End Time (MM:SS)", "01:26", 
+    audio_end_time_str = st.text_input("Audio End Time (MM:SS)", st.session_state.audio_end_time_str, 
                                     help="End time of the audio in MM:SS format (also dictates video duration)")
+    
+    # Update session state with any manual changes
+    st.session_state.audio_start_time_str = audio_start_time_str
+    st.session_state.audio_end_time_str = audio_end_time_str
     
     # Convert MM:SS to seconds
     def time_str_to_seconds(time_str):
@@ -202,7 +305,8 @@ with tab_input:
     st.caption(f"Start time in seconds: {audio_start_time}")
     st.caption(f"End time in seconds: {audio_end_time}")
     
-    output_filename = st.text_input("Output Video Filename", "youtube_short.mp4", 
+    default_output_filename = get_profile_value(selected_profile_key, 'input_output.output_filename', "youtube_short.mp4")
+    output_filename = st.text_input("Output Video Filename", default_output_filename, 
                                   help="Name of the output video file")
 
 # Video settings
@@ -210,52 +314,76 @@ with tab_video:
     st.header("Video Settings")
     
     # Single column layout for better vertical alignment
-    video_fps = st.number_input("Video FPS", 24, 60, 60, 
+    default_fps = get_profile_value(selected_profile_key, 'video.fps', 60)
+    video_fps = st.number_input("Video FPS", 24, 60, default_fps, 
                         help="Frames per second for the output video")
     
     st.markdown("Video Dimensions (9:16 aspect ratio for YouTube Shorts)")
-    video_width = st.number_input("Video Width", 360, 1920, 1080, 
+    default_width = get_profile_value(selected_profile_key, 'video.width', 1080)
+    default_height = get_profile_value(selected_profile_key, 'video.height', 1920)
+    video_width = st.number_input("Video Width", 360, 1920, default_width, 
                                 help="Width of the output video")
-    video_height = st.number_input("Video Height", 640, 3840, 1920, 
+    video_height = st.number_input("Video Height", 640, 3840, default_height, 
                                  help="Height of the output video")
 
 # Background settings
 with tab_background:
     st.header("Background Settings")
     
+    default_bg_mode = get_profile_value(selected_profile_key, 'background.mode', "blur_image")
+    bg_modes = ["blur_image", "solid"]
+    bg_mode_index = bg_modes.index(default_bg_mode) if default_bg_mode in bg_modes else 0
     background_mode = st.selectbox("Background Mode", 
-                                 ["blur_image", "solid"], 
+                                 bg_modes, 
+                                 index=bg_mode_index,
                                  help="Options: 'solid', 'blur_image'")
     
+    # Initialize all background variables to avoid NameError
+    default_blur_radius = get_profile_value(selected_profile_key, 'background.blur_radius', 50)
+    default_image_fit = get_profile_value(selected_profile_key, 'background.image_fit', "stretch")
+    default_bg_color = get_profile_value(selected_profile_key, 'background.color', "#000000")
+    
     if background_mode == "blur_image":
-        background_blur_radius = st.number_input("Background Blur Radius", 10, 100, 50, 
+        background_blur_radius = st.number_input("Background Blur Radius", 10, 100, default_blur_radius, 
                                           help="Blur radius if BACKGROUND_MODE is 'blur_image'")
         
+        fit_options = ["stretch", "crop", "fill"]
+        fit_index = fit_options.index(default_image_fit) if default_image_fit in fit_options else 0
         background_image_fit = st.selectbox("Background Image Fit", 
-                                          ["stretch", "crop", "fill"], 
+                                          fit_options,
+                                          index=fit_index, 
                                           help="Options: 'stretch', 'crop', 'fill'")
+        # Set defaults for variables not shown in this mode
+        background_color = default_bg_color
     else:
-        background_color = st.color_picker("Background Color", "#000000", 
+        background_color = st.color_picker("Background Color", default_bg_color, 
                                          help="Background color if BACKGROUND_MODE is 'solid'")
+        # Set defaults for variables not shown in this mode
+        background_blur_radius = default_blur_radius
+        background_image_fit = default_image_fit
 
 # Image settings
 with tab_image:
     st.header("Image Settings")
     
-    image_width_percentage = st.number_input("Image Width Percentage", 10, 100, 65, 
+    default_img_width_pct = get_profile_value(selected_profile_key, 'image.width_percentage', 65)
+    image_width_percentage = st.number_input("Image Width Percentage", 10, 100, default_img_width_pct, 
                                       help="Width of the image as a percentage of the video width")
     
-    image_corner_radius = st.number_input("Image Corner Radius", 0, 100, 30, 
+    default_corner_radius = get_profile_value(selected_profile_key, 'image.corner_radius', 30)
+    image_corner_radius = st.number_input("Image Corner Radius", 0, 100, default_corner_radius, 
                                    help="Set to 0 for no rounding")
     
     col1, col2 = st.columns(2)
     
     with col1:
-        image_x_position = st.number_input("Image X Position", -1, 1920, -1, 
+        default_x_pos = get_profile_value(selected_profile_key, 'image.x_position', -1)
+        image_x_position = st.number_input("Image X Position", -1, 1920, default_x_pos, 
                                          help="Top-left corner X for the image (-1 for auto-center)")
     
     with col2:
-        image_y_position = st.number_input("Image Y Position", -1, 3840, -1, 
+        default_y_pos = get_profile_value(selected_profile_key, 'image.y_position', -1)
+        image_y_position = st.number_input("Image Y Position", -1, 3840, default_y_pos, 
                                          help="Top-left corner Y for the image (-1 for auto-center)")
     
     st.subheader("Shadow Properties")
@@ -263,75 +391,86 @@ with tab_image:
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        shadow_offset_x = st.number_input("Shadow Offset X", 0, 50, 10, 
+        default_shadow_x = get_profile_value(selected_profile_key, 'shadow.offset_x', 10)
+        shadow_offset_x = st.number_input("Shadow Offset X", 0, 50, default_shadow_x, 
                                         help="Horizontal offset for shadow")
     
     with col2:
-        shadow_offset_y = st.number_input("Shadow Offset Y", 0, 50, 10, 
+        default_shadow_y = get_profile_value(selected_profile_key, 'shadow.offset_y', 10)
+        shadow_offset_y = st.number_input("Shadow Offset Y", 0, 50, default_shadow_y, 
                                         help="Vertical offset for shadow")
     
     with col3:
-        shadow_blur_radius = st.number_input("Shadow Blur Radius", 0, 50, 15, 
+        default_shadow_blur = get_profile_value(selected_profile_key, 'shadow.blur_radius', 15)
+        shadow_blur_radius = st.number_input("Shadow Blur Radius", 0, 50, default_shadow_blur, 
                                            help="Blur radius for shadow")
     
-    shadow_darkness_factor = st.number_input("Shadow Darkness Factor", 0.0, 1.0, 0.5, step=0.01, 
+    default_shadow_darkness = get_profile_value(selected_profile_key, 'shadow.darkness_factor', 0.5)
+    shadow_darkness_factor = st.number_input("Shadow Darkness Factor", 0.0, 1.0, default_shadow_darkness, step=0.01, 
                                       help="For solid bg image shadow")
 
 # Waveform settings
 with tab_waveform:
     st.header("Waveform Animation Settings")
     
-    waveform_enabled = st.checkbox("Enable Waveform", True, 
+    default_waveform_enabled = get_profile_value(selected_profile_key, 'waveform.enabled', True)
+    waveform_enabled = st.checkbox("Enable Waveform", default_waveform_enabled, 
                                   help="Whether to show the audio waveform visualization")
     
-    # Initialize default values for waveform-related variables
-    waveform_analysis_mode = "melspectrogram"
-    waveform_color_mode = "contrast"
-    waveform_color = "#FFFFFF"
-    waveform_height_percentage = 15
-    waveform_bar_count = 50
-    waveform_bar_spacing_ratio = 0.2
-    waveform_smoothing_factor = 0.35
-    spacing_image_waveform = 215
-    waveform_min_db = -80.0
-    waveform_max_db = 0.0
+    # Initialize default values for waveform-related variables from profile
+    waveform_analysis_mode = get_profile_value(selected_profile_key, 'waveform.analysis_mode', "melspectrogram")
+    waveform_color_mode = get_profile_value(selected_profile_key, 'waveform.color_mode', "contrast")
+    waveform_color = get_profile_value(selected_profile_key, 'waveform.color', "#FFFFFF")
+    waveform_height_percentage = get_profile_value(selected_profile_key, 'waveform.height_percentage', 15)
+    waveform_bar_count = get_profile_value(selected_profile_key, 'waveform.bar_count', 50)
+    waveform_bar_spacing_ratio = get_profile_value(selected_profile_key, 'waveform.bar_spacing_ratio', 0.2)
+    waveform_smoothing_factor = get_profile_value(selected_profile_key, 'waveform.smoothing_factor', 0.35)
+    spacing_image_waveform = get_profile_value(selected_profile_key, 'waveform.spacing_from_image', 215)
+    waveform_min_db = get_profile_value(selected_profile_key, 'waveform.min_db', -80.0)
+    waveform_max_db = get_profile_value(selected_profile_key, 'waveform.max_db', 0.0)
     
     if waveform_enabled:
+        analysis_modes = ["melspectrogram", "rms"]
+        analysis_index = analysis_modes.index(waveform_analysis_mode) if waveform_analysis_mode in analysis_modes else 0
         waveform_analysis_mode = st.selectbox("Waveform Analysis Mode", 
-                                             ["melspectrogram", "rms"], 
+                                             analysis_modes,
+                                             index=analysis_index, 
                                              help="Options: 'rms', 'melspectrogram'")
         
+        color_modes = ["contrast", "custom", "white", "black"]
+        color_index = color_modes.index(waveform_color_mode) if waveform_color_mode in color_modes else 0
         waveform_color_mode = st.selectbox("Waveform Color Mode", 
-                                          ["contrast", "custom", "white", "black"], 
+                                          color_modes,
+                                          index=color_index, 
                                           help="Options: 'custom', 'contrast', 'white', 'black'")
         
         if waveform_color_mode == "custom":
-            waveform_color = st.color_picker("Waveform Color", "#FFFFFF", 
+            waveform_color = st.color_picker("Waveform Color", waveform_color, 
                                             help="(R, G, B) - Used if WAVEFORM_COLOR_MODE is 'custom'")
         
-        waveform_height_percentage = st.number_input("Waveform Height Percentage", 5, 50, 15, 
+        waveform_height_percentage = st.number_input("Waveform Height Percentage", 5, 50, waveform_height_percentage, 
                                               help="Height of the waveform as a percentage of the video height")
         
-        waveform_bar_count = st.number_input("Waveform Bar Count", 10, 100, 50, 
+        waveform_bar_count = st.number_input("Waveform Bar Count", 10, 100, waveform_bar_count, 
                                       help="If melspectrogram, this is n_mels")
         
-        waveform_bar_spacing_ratio = st.number_input("Waveform Bar Spacing Ratio", 0.0, 1.0, 0.2, step=0.01, 
+        waveform_bar_spacing_ratio = st.number_input("Waveform Bar Spacing Ratio", 0.0, 1.0, waveform_bar_spacing_ratio, step=0.01, 
                                               help="Spacing between waveform bars")
         
-        waveform_smoothing_factor = st.number_input("Waveform Smoothing Factor", 0.0, 1.0, 0.35, step=0.01, 
+        waveform_smoothing_factor = st.number_input("Waveform Smoothing Factor", 0.0, 1.0, waveform_smoothing_factor, step=0.01, 
                                              help="Applied to final band values if melspectrogram, or RMS if rms mode")
         
-        spacing_image_waveform = st.number_input("Spacing Between Image and Waveform", 50, 500, 215, 
+        spacing_image_waveform = st.number_input("Spacing Between Image and Waveform", 50, 500, spacing_image_waveform, 
                                           help="Vertical spacing between image and waveform")
         
         col1, col2 = st.columns(2)
         
         with col1:
-            waveform_min_db = st.number_input("Waveform Min dB", -100.0, 0.0, -80.0, step=0.1, 
+            waveform_min_db = st.number_input("Waveform Min dB", -100.0, 0.0, waveform_min_db, step=0.1, 
                                        help="For melspectrogram normalization")
         
         with col2:
-            waveform_max_db = st.number_input("Waveform Max dB", -50.0, 0.0, 0.0, step=0.1, 
+            waveform_max_db = st.number_input("Waveform Max dB", -50.0, 0.0, waveform_max_db, step=0.1, 
                                        help="For melspectrogram normalization")
 
 # Generate video
