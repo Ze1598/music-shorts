@@ -14,6 +14,14 @@ All key aspects like input file paths, audio timings, image placement, visual ef
 -   **Rounded Corners**: Both the centered image and its shadow are processed to have rounded corners. Radius is configurable.
 -   **Selectable Background Mode**: `"solid"` (predominant color) or `"blur_image"`. Blur intensity and image fit (`"stretch"`, `"crop"`, `"fill"`) are configurable.
 -   **Unified Shadow Effect**: The centered image and its waveform (if enabled) receive a shadow using the same offset, blur, and color derivation logic.
+-   **Video Profiles System**: Pre-configured settings profiles for different video types:
+    *   **Shorts with waveform**: 9:16 aspect ratio (1080x1920) optimized for YouTube Shorts
+    *   **Visualizer with waveform**: 16:9 aspect ratio (1920x1080) for landscape music visualizations
+    *   **Custom profiles**: Easily extensible through `video_profiles.yaml` configuration
+-   **Smart Audio Duration Management**: 
+    *   **Auto-calculate video length**: Automatically sets video duration to match audio file length
+    *   **Editable time controls**: Start/end times remain fully editable even with auto-calculation enabled
+    *   **Persistent values**: Manual adjustments are preserved when toggling between auto/manual modes
 -   **Advanced Audio-Reactive Waveform Animation**:
     *   **Enabled/Disabled**: Can be turned on or off.
     *   **Analysis Modes**: `"rms"` (overall intensity) or `"melspectrogram"` (dynamic frequency band reaction).
@@ -26,8 +34,8 @@ All key aspects like input file paths, audio timings, image placement, visual ef
     *   **Customizable Appearance**: Waveform height, bar count (`n_mels` for melspectrogram), bar spacing, smoothing, and vertical spacing from the main image (`SPACING_IMAGE_WAVEFORM`) are configurable.
 -   **Custom Audio & FPS**: Uses user-provided audio (WAV/MP3) and allows setting video FPS (default 60).
 -   **Audio Trimming**: Specifies start/end times for audio, dictating video duration.
--   **Parameterized Configuration**: All settings via global variables, with user-preferred defaults integrated.
--   **Standard Shorts Format**: Outputs 1080x1920 video.
+-   **Fully Customizable**: All settings remain editable regardless of profile selection - profiles only provide convenient starting points.
+-   **Multiple Output Formats**: Standard Shorts format (9:16) and landscape format (16:9) supported.
 
 ## Dependencies
 
@@ -36,6 +44,7 @@ All key aspects like input file paths, audio timings, image placement, visual ef
 -   **MoviePy** (version 1.0.3 recommended)
 -   **NumPy**
 -   **Librosa** (for audio analysis)
+-   **PyYAML** (for video profiles configuration)
 -   **colorsys** (Python built-in)
 
 Install all dependencies using pip:
@@ -43,16 +52,47 @@ Install all dependencies using pip:
 pip install -r requirements.txt
 ```
 
+## Video Profiles
+
+The application now includes a flexible video profiles system via `video_profiles.yaml`:
+
+### Available Profiles
+
+1. **Shorts with waveform** (default):
+   - 9:16 aspect ratio (1080x1920)
+   - 65% image width
+   - Optimized for YouTube Shorts format
+
+2. **Visualizer with waveform**:
+   - 16:9 aspect ratio (1920x1080) 
+   - 25% image width (smaller, more focus on waveform)
+   - Ideal for landscape music visualizations
+
+### Profile Configuration
+
+All profiles are defined in `video_profiles.yaml` with the following structure:
+- **Input/Output**: Audio timing, output filename, auto-duration settings
+- **Video**: Dimensions, FPS, aspect ratio
+- **Background**: Mode (blur/solid), blur radius, image fit options
+- **Image**: Size, positioning, corner radius
+- **Shadow**: Offsets, blur radius, darkness
+- **Waveform**: All animation parameters, colors, spacing
+
+### Adding Custom Profiles
+
+Simply extend `video_profiles.yaml` with new profile definitions. Each profile requires a `display_name` attribute for the UI dropdown.
+
 ## Parameters
 
-All parameters can be configured through the Streamlit interface or by editing the global variables at the beginning of `main.py`. Key parameters include:
+All parameters can be configured through the Streamlit interface, with profile-based defaults or manual customization:
 
--   `VIDEO_FPS` (int): Frames per second for the output video (default: `60`).
--   `SPACING_IMAGE_WAVEFORM` (int): Vertical spacing in pixels between the bottom of the centered image and the top of the waveform area (default: `20`, functionality confirmed).
--   **Default Values**: Many parameters now reflect user-preferred defaults (e.g., `BACKGROUND_MODE = "blur_image"`, `IMAGE_WIDTH_PERCENTAGE = 55`, `WAVEFORM_COLOR_MODE = "contrast"`, specific audio timings).
--   The `get_waveform_contrast_color` function now implements more sophisticated logic for choosing a contrasting color beyond simple black/white.
+-   **Video Profiles**: Choose from pre-configured settings or customize any parameter
+-   **Auto-Duration**: Automatically set video length to match audio file duration
+-   **Real-time Editing**: All fields remain editable regardless of profile selection
+-   **Session Persistence**: Manual changes are preserved when switching between auto/manual modes
+-   **Advanced Waveform**: Sophisticated contrast color selection and audio analysis options
 
-**(Other parameters like `IMAGE_PATH`, `AUDIO_PATH`, `BACKGROUND_MODE`, `SHADOW_OFFSET_X/Y`, `WAVEFORM_ANALYSIS_MODE`, etc., are still present as described in previous README versions, with their behavior enhanced by the new logic where applicable).**
+**(All original parameters remain available and are now organized in an intuitive tabbed interface across Input/Output, Video Settings, Background, Image, and Waveform sections.)**
 
 ## How to Use
 
@@ -70,7 +110,9 @@ All parameters can be configured through the Streamlit interface or by editing t
 
 3. **Use the Interface**:
    - Upload your image and audio files
-   - Configure all parameters using the intuitive interface
+   - Select a video profile (or keep the default "Shorts with waveform")
+   - Optionally enable auto-calculate video length to match audio duration
+   - Configure all parameters using the intuitive tabbed interface
    - Generate your video with a single click
    - Download the resulting video directly from the app
 
