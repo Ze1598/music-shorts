@@ -2,14 +2,15 @@
 
 ## Overview
 
-This application automates the creation of YouTube Shorts videos. It takes a square input image and an audio file, and generates a 9:16 aspect ratio video (defaulting to 60 FPS). The video features the input image centered with rounded corners, and its shadow also has rounded corners for a cohesive look. Users can choose between a solid background color (derived from the image's predominant color) or a blurred version of the input image as the background.
+This application automates the creation of YouTube Shorts videos with integrated YouTube upload and scheduling capabilities. It takes a square input image and an audio file, and generates a 9:16 aspect ratio video (defaulting to 60 FPS). The video features the input image centered with rounded corners, and its shadow also has rounded corners for a cohesive look. Users can choose between a solid background color (derived from the image's predominant color) or a blurred version of the input image as the background.
 
-A key feature is an optional, highly customizable audio-reactive waveform animation displayed below the centered image, with configurable vertical spacing between the image and the waveform. This version (v6) incorporates user-preferred default parameter values, implements a more sophisticated "contrast" mode for waveform color selection (aiming for legible inverted or complementary-like colors before falling back to black/white), and ensures the shadow for both the main image and the waveform respects rounded corners.
+A key feature is an optional, highly customizable audio-reactive waveform animation displayed below the centered image, with configurable vertical spacing between the image and the waveform. The application now includes full YouTube integration for direct upload and advanced scheduling of videos.
 
-All key aspects like input file paths, audio timings, image placement, visual effects, and output filename are configurable through global variables within the script.
+All key aspects like input file paths, audio timings, image placement, visual effects, output filename, and YouTube publishing settings are configurable through an intuitive web interface.
 
 ## Features
 
+### 🎬 Video Generation
 -   **Input Image**: Uses a user-provided square image (PNG or JPG).
 -   **Rounded Corners**: Both the centered image and its shadow are processed to have rounded corners. Radius is configurable.
 -   **Selectable Background Mode**: `"solid"` (predominant color) or `"blur_image"`. Blur intensity and image fit (`"stretch"`, `"crop"`, `"fill"`) are configurable.
@@ -32,25 +33,104 @@ All key aspects like input file paths, audio timings, image placement, visual ef
         *   `"black"`: Forces waveform to be black.
     *   **Shadow**: Waveform bars have a shadow, using shared parameters.
     *   **Customizable Appearance**: Waveform height, bar count (`n_mels` for melspectrogram), bar spacing, smoothing, and vertical spacing from the main image (`SPACING_IMAGE_WAVEFORM`) are configurable.
+
+### 📺 YouTube Integration
+-   **Direct Upload**: Upload generated videos directly to YouTube without leaving the app
+-   **Advanced Scheduling**: Schedule videos for future publication with timezone support
+-   **Automatic YouTube Shorts Detection**: Automatically tags qualifying videos as YouTube Shorts
+-   **Privacy Controls**: Set video privacy (private, unlisted, public) with automatic requirements for scheduled uploads
+-   **Metadata Management**: Add titles, descriptions, tags, and custom thumbnails
+-   **OAuth Authentication**: Secure Google OAuth integration with automatic redirect handling
+-   **Upload Progress Tracking**: Real-time upload progress with retry logic for failed uploads
+-   **Multi-Environment Support**: Works both locally and when deployed to cloud platforms
+
+### ⚙️ Technical Features
 -   **Custom Audio & FPS**: Uses user-provided audio (WAV/MP3) and allows setting video FPS (default 60).
 -   **Audio Trimming**: Specifies start/end times for audio, dictating video duration.
 -   **Fully Customizable**: All settings remain editable regardless of profile selection - profiles only provide convenient starting points.
 -   **Multiple Output Formats**: Standard Shorts format (9:16) and landscape format (16:9) supported.
+-   **Responsive Web Interface**: Clean, tabbed interface with real-time validation and preview.
 
 ## Dependencies
 
+### Core Dependencies
 -   **Streamlit** (for the web interface)
 -   **Pillow (PIL)** (for image processing)
 -   **MoviePy** (version 1.0.3 recommended)
 -   **NumPy**
 -   **Librosa** (for audio analysis)
 -   **PyYAML** (for video profiles configuration)
--   **colorsys** (Python built-in)
+
+### YouTube Integration Dependencies
+-   **google-auth** (≥2.15.0)
+-   **google-auth-oauthlib** (≥0.7.1)
+-   **google-auth-httplib2** (≥0.1.0)
+-   **google-api-python-client** (≥2.70.0)
+-   **pytz** (≥2023.3) - for timezone support
 
 Install all dependencies using pip:
 ```bash
 pip install -r requirements.txt
 ```
+
+## YouTube Integration Setup
+
+### Required Google Cloud Setup
+
+To use the YouTube upload and scheduling features, you need to set up Google OAuth credentials:
+
+#### 1. Create a Google Cloud Project
+1. Go to [Google Cloud Console](https://console.cloud.google.com)
+2. Create a new project or select an existing one
+3. Enable the **YouTube Data API v3**:
+   - Go to APIs & Services → Library
+   - Search for "YouTube Data API v3"
+   - Click "Enable"
+
+#### 2. Create OAuth 2.0 Credentials
+1. Go to APIs & Services → Credentials
+2. Click "Create Credentials" → "OAuth 2.0 Client IDs"
+3. Configure the OAuth consent screen if prompted
+4. Choose "Web application" as application type
+5. Add these **Authorized redirect URIs**:
+   - `http://localhost:8501` (for local development)
+   - `https://your-app-url.streamlit.app/` (for deployed version)
+6. Download the credentials JSON file
+
+#### 3. Required OAuth Scopes
+The application requires the following Google OAuth scope:
+- `https://www.googleapis.com/auth/youtube` - Full access to YouTube account for uploading and managing videos
+
+**Note**: This scope requires Google verification if you plan to make the app available to other users. For personal use, you can run in testing mode.
+
+#### 4. YouTube Channel Requirements
+- You must have a YouTube channel associated with your Google account
+- The channel must be in good standing (no strikes or restrictions)
+- For scheduled uploads, videos must be set to "private" privacy status (YouTube API requirement)
+
+### Credentials Configuration
+
+The app supports two methods for providing OAuth credentials:
+
+#### Local Development (Recommended)
+1. Download your OAuth credentials JSON from Google Cloud Console
+2. Rename it to `client_secrets.json` 
+3. Place it in the project root directory
+4. The app will automatically use this file
+
+#### Cloud Deployment (Streamlit Cloud, etc.)
+Set these environment variables in your deployment platform:
+- `GOOGLE_CLIENT_ID` - Your OAuth client ID
+- `GOOGLE_CLIENT_SECRET` - Your OAuth client secret
+- `STREAMLIT_APP_URL` - Your app's URL (e.g., `https://your-app.streamlit.app`)
+
+The app automatically detects the environment and uses the appropriate method.
+
+### Authentication Flow
+1. Click "Get Authorization Code" in the YouTube tab
+2. You'll be redirected to Google for authorization
+3. After granting permissions, you'll be redirected back to the app
+4. Authentication completes automatically - no manual code copying required!
 
 ## Video Profiles
 
@@ -96,45 +176,116 @@ All parameters can be configured through the Streamlit interface, with profile-b
 
 ## How to Use
 
-### Option 1: Streamlit Interface (Recommended)
+### Streamlit Interface (Recommended)
 
 1. **Install Dependencies**:
    ```bash
    pip install -r requirements.txt
    ```
 
-2. **Run the Streamlit App**:
+2. **Setup YouTube Credentials** (Optional):
+   - Follow the [YouTube Integration Setup](#youtube-integration-setup) section above
+   - Place `client_secrets.json` in project directory for local use
+   - Or set environment variables for cloud deployment
+
+3. **Run the Streamlit App**:
    ```bash
    streamlit run app.py
    ```
 
-3. **Use the Interface**:
-   - Upload your image and audio files
-   - Select a video profile (or keep the default "Shorts with waveform")
-   - Optionally enable auto-calculate video length to match audio duration
-   - Configure all parameters using the intuitive tabbed interface
-   - Generate your video with a single click
+4. **Generate Videos**:
+   - **Input/Output Tab**: Upload your image and audio files
+   - **Video Settings Tab**: Configure video dimensions, FPS, and format
+   - **Background Tab**: Choose between solid color or blurred image background
+   - **Image Tab**: Adjust image size, position, corner radius, and shadow effects
+   - **Waveform Tab**: Configure audio-reactive waveform animation (optional)
+   - **Generate Tab**: Create your video with a single click
    - Download the resulting video directly from the app
 
-### Option 2: Direct Script Usage
+5. **Upload to YouTube** (Optional):
+   - **YouTube Tab**: Connect your YouTube account with OAuth
+   - **Direct Upload**: Upload generated videos immediately with metadata
+   - **Advanced Scheduling**: Schedule videos for future publication
+     - Set publish date and time with timezone support
+     - Videos are automatically set to "private" for scheduling (YouTube requirement)
+     - Minimum 60 minutes in the future (YouTube requirement)
+   - **Metadata Management**: Add titles, descriptions, tags
+   - **Auto-Detection**: Automatically tags qualifying videos as YouTube Shorts
 
-1. **Install Dependencies**.
-2. **Prepare Inputs**: Square image and audio file.
-3. **Configure Parameters**: Update placeholders for `IMAGE_PATH` and `AUDIO_PATH` in `main.py`. Adjust other global variables as needed.
-4. **Run Script**: `python main.py`.
-5. **Output**: Video file (e.g., `youtube_short_final_v6.mp4`).
+### Direct Script Usage (Legacy)
 
-## Script Execution Steps (Internal Logic Changes from v5)
+For advanced users who prefer command-line usage:
 
-1.  **Pre-computation (`precompute_assets`)**:
-    *   The shadow for the main image (`CENTER_IMG_SHADOW_GLOBAL`) is now created by applying rounded corners to a solid color silhouette derived from the image's alpha, then blurring. This ensures the shadow shape matches the rounded image.
-    *   `SPACING_IMAGE_WAVEFORM` is explicitly used in calculating `WAVEFORM_AREA_TOP_Y_GLOBAL`.
-2.  **Frame Generation (`make_frame_for_moviepy`)**:
-    *   **Waveform Color**: If `WAVEFORM_COLOR_MODE` is `"contrast"`, the `get_waveform_contrast_color` function is called. This function first tries an inverted color. If contrast isn't sufficient, it attempts a complementary-like color with adjusted lightness. If still not sufficiently contrasting, it falls back to black or white based on the background luminance.
-    *   The pre-computed rounded shadow (`CENTER_IMG_SHADOW_GLOBAL`) is pasted before the main image.
+1. **Install Dependencies**
+2. **Prepare Inputs**: Square image and audio file
+3. **Configure Parameters**: Update `IMAGE_PATH` and `AUDIO_PATH` in `video_generation.py`
+4. **Run Script**: `python video_generation.py`
+5. **Output**: Video file (e.g., `youtube_short.mp4`)
 
-**(Other core logic for background, image processing, audio analysis (RMS/Mel Spectrogram), waveform bar drawing, and video assembly remains similar to v5 but incorporates the user's default parameters and the specific enhancements mentioned).**
+*Note: The Streamlit interface is recommended as it provides a much more user-friendly experience with all the latest features.*
 
-## Output
+## Security & Privacy
 
-The script produces a video file with the features described, incorporating the user's settings, the refined waveform contrast color logic, and correct image-to-waveform spacing.
+### Data Handling
+- **Local Processing**: All video generation happens locally on your machine
+- **No Data Storage**: The app doesn't store your media files or personal data
+- **Temporary Files**: Uploaded files are temporarily stored during processing and cleaned up afterward
+
+### YouTube Integration Security
+- **OAuth 2.0**: Uses industry-standard Google OAuth for secure authentication
+- **Limited Scope**: Only requests YouTube upload permissions, no access to other Google services
+- **Credential Storage**: 
+  - Local: Credentials stored in browser session only
+  - Cloud: Environment variables stored securely by hosting platform
+- **No Persistent Storage**: Authentication tokens are not permanently stored
+
+### Recommended Security Practices
+- Use a dedicated Google account for API access if sharing the app
+- Regularly review authorized apps in your Google account settings
+- Keep your `client_secrets.json` file secure and never commit it to version control
+- For production deployments, consider implementing additional access controls
+
+## Troubleshooting
+
+### Common YouTube Integration Issues
+
+**"Invalid redirect URI" error:**
+- Ensure your Google Cloud Console has the correct redirect URIs
+- Local: `http://localhost:8501`
+- Deployed: `https://your-app-url.streamlit.app/`
+
+**"The request metadata specifies an invalid scheduled publishing time":**
+- Ensure scheduled time is at least 60 minutes in the future
+- Verify timezone settings are correct
+- Check that the video privacy is set to "private" for scheduling
+
+**Authentication not working:**
+- Clear browser cache and try again
+- Verify your Google Cloud project has YouTube Data API v3 enabled
+- Check that your OAuth consent screen is configured properly
+
+### Video Generation Issues
+
+**Out of memory errors:**
+- Reduce video resolution or FPS
+- Use shorter audio clips
+- Close other applications to free up RAM
+
+**Audio not syncing:**
+- Ensure audio file is not corrupted
+- Try converting audio to WAV format
+- Check that start/end times are within the audio file duration
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Make your changes
+4. Test thoroughly, especially YouTube integration if modified
+5. Commit your changes (`git commit -m 'Add amazing feature'`)
+6. Push to the branch (`git push origin feature/amazing-feature`)
+7. Open a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
