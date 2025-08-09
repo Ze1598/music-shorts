@@ -572,12 +572,57 @@ with tab_youtube:
         
         if st.button("🔗 Get Authorization Code", type="primary"):
             from google_auth_oauthlib.flow import Flow
+            import json
             
-            flow = Flow.from_client_secrets_file(
-                'client_secrets.json',
-                scopes=['https://www.googleapis.com/auth/youtube'],
-                redirect_uri='http://localhost'
-            )
+            # Try to load client secrets from file first, then env variables
+            try:
+                # Determine redirect URI based on environment
+                if os.path.exists('client_secrets.json'):
+                    # Local development
+                    redirect_uri = 'http://localhost'
+                else:
+                    # Cloud deployment - use the actual app URL
+                    redirect_uri = os.getenv('STREAMLIT_APP_URL', 'https://music-shorts.streamlit.app')
+                
+                if os.path.exists('client_secrets.json'):
+                    # Load from file (local development)
+                    flow = Flow.from_client_secrets_file(
+                        'client_secrets.json',
+                        scopes=['https://www.googleapis.com/auth/youtube'],
+                        redirect_uri=redirect_uri
+                    )
+                else:
+                    # Load from environment variables (cloud deployment)
+                    client_config = {
+                        "web": {
+                            "client_id": os.getenv('GOOGLE_CLIENT_ID'),
+                            "client_secret": os.getenv('GOOGLE_CLIENT_SECRET'),
+                            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                            "token_uri": "https://oauth2.googleapis.com/token",
+                            "redirect_uris": [redirect_uri]
+                        }
+                    }
+                    
+                    # Validate required environment variables
+                    if not client_config["web"]["client_id"] or not client_config["web"]["client_secret"]:
+                        st.error("❌ Missing Google OAuth credentials. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables.")
+                        st.stop()
+                    
+                    flow = Flow.from_client_config(
+                        client_config,
+                        scopes=['https://www.googleapis.com/auth/youtube'],
+                        redirect_uri=redirect_uri
+                    )
+                
+                # Show the redirect URI being used for debugging
+                st.info(f"🔗 Using redirect URI: {redirect_uri}")
+                    
+            except Exception as e:
+                st.error(f"❌ Error setting up OAuth flow: {e}")
+                st.info("💡 Make sure you have either:")
+                st.markdown("- `client_secrets.json` file in your project directory, OR")
+                st.markdown("- `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` environment variables set")
+                st.stop()
             
             auth_url, _ = flow.authorization_url()
             st.session_state.oauth_flow = flow
