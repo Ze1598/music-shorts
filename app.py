@@ -577,7 +577,7 @@ with tab_youtube:
             
             # Determine redirect URI based on environment
             if os.path.exists('client_secrets.json'):
-                redirect_uri = 'http://localhost'
+                redirect_uri = 'http://localhost:8501'
                 flow = Flow.from_client_secrets_file(
                     'client_secrets.json',
                     scopes=['https://www.googleapis.com/auth/youtube'],
@@ -632,7 +632,7 @@ with tab_youtube:
                 # Determine redirect URI based on environment
                 if os.path.exists('client_secrets.json'):
                     # Local development
-                    redirect_uri = 'http://localhost'
+                    redirect_uri = 'http://localhost:8501'
                 else:
                     # Cloud deployment - use the actual app URL (with trailing slash to match browser behavior)
                     redirect_uri = os.getenv('STREAMLIT_APP_URL', 'https://music-shorts.streamlit.app/')
@@ -669,9 +669,6 @@ with tab_youtube:
                         scopes=['https://www.googleapis.com/auth/youtube'],
                         redirect_uri=redirect_uri
                     )
-                
-                # Show the redirect URI being used for debugging
-                st.info(f"🔗 Using redirect URI: {redirect_uri}")
                     
             except Exception as e:
                 st.error(f"❌ Error setting up OAuth flow: {e}")
