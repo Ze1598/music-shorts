@@ -581,8 +581,11 @@ with tab_youtube:
                     # Local development
                     redirect_uri = 'http://localhost'
                 else:
-                    # Cloud deployment - use the actual app URL
-                    redirect_uri = os.getenv('STREAMLIT_APP_URL', 'https://music-shorts.streamlit.app')
+                    # Cloud deployment - use the actual app URL (with trailing slash to match browser behavior)
+                    redirect_uri = os.getenv('STREAMLIT_APP_URL', 'https://music-shorts.streamlit.app/')
+                    # Ensure trailing slash for consistency
+                    if not redirect_uri.endswith('/'):
+                        redirect_uri += '/'
                 
                 if os.path.exists('client_secrets.json'):
                     # Load from file (local development)
