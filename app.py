@@ -568,24 +568,54 @@ with tab_youtube:
     query_params = st.query_params
     oauth_code = query_params.get('code')
     
-    # If there's a code and we have a flow, authenticate immediately
-    if oauth_code and 'oauth_flow' in st.session_state:
+    # If there's a code, try to authenticate (recreate flow if needed)
+    if oauth_code:
         try:
-            flow = st.session_state.oauth_flow
+            # Recreate the flow since session state might be cleared
+            from google_auth_oauthlib.flow import Flow
+            import json
+            
+            # Determine redirect URI based on environment
+            if os.path.exists('client_secrets.json'):
+                redirect_uri = 'http://localhost'
+                flow = Flow.from_client_secrets_file(
+                    'client_secrets.json',
+                    scopes=['https://www.googleapis.com/auth/youtube'],
+                    redirect_uri=redirect_uri
+                )
+            else:
+                redirect_uri = os.getenv('STREAMLIT_APP_URL', 'https://music-shorts.streamlit.app/')
+                if not redirect_uri.endswith('/'):
+                    redirect_uri += '/'
+                
+                client_config = {
+                    "web": {
+                        "client_id": os.getenv('GOOGLE_CLIENT_ID'),
+                        "client_secret": os.getenv('GOOGLE_CLIENT_SECRET'),
+                        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                        "token_uri": "https://oauth2.googleapis.com/token",
+                        "redirect_uris": [redirect_uri]
+                    }
+                }
+                
+                flow = Flow.from_client_config(
+                    client_config,
+                    scopes=['https://www.googleapis.com/auth/youtube'],
+                    redirect_uri=redirect_uri
+                )
+            
+            # Get the token using the code
             flow.fetch_token(code=oauth_code)
             st.session_state.youtube_credentials = flow.credentials
-            
-            # Clean up
-            del st.session_state.oauth_flow
-            if 'auth_url' in st.session_state:
-                del st.session_state.auth_url
             
             # Clear URL and refresh
             st.query_params.clear()
             st.success("🎉 Successfully authenticated with YouTube!")
             st.rerun()
+            
         except Exception as e:
             st.error(f"❌ Authentication failed: {e}")
+            st.query_params.clear()
     
     # Check if authenticated
     youtube_authenticated = 'youtube_credentials' in st.session_state
