@@ -1,2 +1,14 @@
 __pycache__/**
 .DS_Store
+
+# API credentials and secrets
+client_secrets.json
+*.json.secret
+.env
+.env.local
+
+# Streamlit secrets
+.streamlit/secrets.toml
+
+# YouTube auth tokens (if stored locally)
+youtube_tokens.json
