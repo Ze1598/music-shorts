@@ -564,6 +564,37 @@ with tab_generate:
 with tab_youtube:
     st.header("YouTube Upload & Scheduling")
     
+    # Check for OAuth callback parameters first
+    query_params = st.query_params
+    oauth_code = query_params.get('code')
+    oauth_error = query_params.get('error')
+    
+    # Handle OAuth callback automatically
+    if oauth_code and 'oauth_flow' in st.session_state:
+        st.info("🔄 Processing OAuth callback...")
+        try:
+            flow = st.session_state.oauth_flow
+            flow.fetch_token(code=oauth_code)
+            
+            st.session_state.youtube_credentials = flow.credentials
+            st.success("🎉 Successfully authenticated with YouTube!")
+            st.balloons()
+            
+            # Clean up
+            del st.session_state.oauth_flow
+            
+            # Clear the URL parameters by rerunning
+            st.query_params.clear()
+            st.rerun()
+            
+        except Exception as e:
+            st.error(f"❌ Authentication failed: {e}")
+            # Clear the URL parameters
+            st.query_params.clear()
+    elif oauth_error:
+        st.error(f"❌ OAuth error: {oauth_error}")
+        st.query_params.clear()
+    
     # Check if authenticated
     youtube_authenticated = 'youtube_credentials' in st.session_state
     
@@ -633,51 +664,19 @@ with tab_youtube:
         
         if 'auth_url' in st.session_state:
             st.markdown(f"""
-            ### 📋 Step 1: Authorize Access
+            ### 🚀 **Automatic Authentication**
             
             [**👆 CLICK HERE TO AUTHORIZE**]({st.session_state.auth_url})
             
-            ### 🔐 Step 2: Enter Authorization Code
+            After clicking the link above:
+            1. **Authorize the app** in the new tab
+            2. **You'll be redirected back** to this app automatically  
+            3. **Authentication will complete** without manual input
+            
+            💡 *No need to copy/paste codes - it's fully automatic!*
             """)
             
-            auth_input = st.text_input(
-                "Paste the full callback URL or just the authorization code:",
-                placeholder="http://localhost/?code=4/0A... or just the code",
-                help="After authorization, Google will redirect to a localhost URL. You can paste the entire URL here, or just extract and paste the code part."
-            )
-            
-            if st.button("✅ Complete Authentication") and auth_input:
-                try:
-                    # Parse auth code from input (handle both full URL and code-only)
-                    auth_code = auth_input.strip()
-                    
-                    # Check if input looks like a URL
-                    if auth_code.startswith('http'):
-                        from urllib.parse import urlparse, parse_qs
-                        parsed_url = urlparse(auth_code)
-                        query_params = parse_qs(parsed_url.query)
-                        
-                        if 'code' in query_params:
-                            auth_code = query_params['code'][0]
-                            st.info(f"✅ Extracted code from URL: {auth_code[:20]}...")
-                        else:
-                            st.error("❌ No authorization code found in the URL. Please check the URL.")
-                            st.stop()
-                    
-                    flow = st.session_state.oauth_flow
-                    flow.fetch_token(code=auth_code)
-                    
-                    st.session_state.youtube_credentials = flow.credentials
-                    st.success("🎉 Successfully authenticated with YouTube!")
-                    st.balloons()
-                    
-                    # Clean up
-                    del st.session_state.oauth_flow
-                    del st.session_state.auth_url
-                    st.rerun()
-                    
-                except Exception as e:
-                    st.error(f"❌ Authentication failed: {e}")
+            st.info("🔗 Click the authorization link above and you'll be redirected back here automatically.")
     
     else:
         # User is authenticated
