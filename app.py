@@ -11,6 +11,9 @@ import yaml
 import video_generation
 import moviepy.editor as mpe
 
+# Import YouTube integration modules
+from youtube_service import YouTubeService, VideoMetadata
+
 st.set_page_config(
     page_title="YouTube Shorts Generator",
     page_icon="🎬",
@@ -54,8 +57,8 @@ def get_profile_value(profile_key, path, default=None):
         return default
 
 # Create tabs for different sections
-tab_input, tab_video, tab_background, tab_image, tab_waveform, tab_generate = st.tabs([
-    "Input/Output", "Video Settings", "Background", "Image", "Waveform", "Generate"
+tab_input, tab_video, tab_background, tab_image, tab_waveform, tab_generate, tab_youtube = st.tabs([
+    "Input/Output", "Video Settings", "Background", "Image", "Waveform", "Generate", "YouTube"
 ])
 
 # Function to run the main script with the provided parameters
@@ -542,6 +545,9 @@ with tab_generate:
                     # Display the video
                     st.video(output_video_path)
                     
+                    # Store generated video path for YouTube upload
+                    st.session_state.generated_video_path = output_video_path
+                    
                     # Provide a download button
                     with open(output_video_path, "rb") as file:
                         st.download_button(
@@ -552,5 +558,185 @@ with tab_generate:
                         )
                 else:
                     st.error(result.stderr)
+
+# YouTube Upload and Scheduling
+with tab_youtube:
+    st.header("YouTube Upload & Scheduling")
+    
+    # Check if authenticated
+    youtube_authenticated = 'youtube_credentials' in st.session_state
+    
+    if not youtube_authenticated:
+        st.subheader("🔐 Connect to YouTube")
+        
+        if st.button("🔗 Get Authorization Code", type="primary"):
+            from google_auth_oauthlib.flow import Flow
+            
+            flow = Flow.from_client_secrets_file(
+                'client_secrets.json',
+                scopes=['https://www.googleapis.com/auth/youtube'],
+                redirect_uri='http://localhost'
+            )
+            
+            auth_url, _ = flow.authorization_url()
+            st.session_state.oauth_flow = flow
+            st.session_state.auth_url = auth_url
+        
+        if 'auth_url' in st.session_state:
+            st.markdown(f"""
+            ### 📋 Step 1: Authorize Access
+            
+            [**👆 CLICK HERE TO AUTHORIZE**]({st.session_state.auth_url})
+            
+            ### 🔐 Step 2: Enter Authorization Code
+            """)
+            
+            auth_code = st.text_input(
+                "Paste the authorization code from Google:",
+                placeholder="Enter the code here...",
+                help="Google will show you a code after authorization. Copy and paste it here."
+            )
+            
+            if st.button("✅ Complete Authentication") and auth_code:
+                try:
+                    flow = st.session_state.oauth_flow
+                    flow.fetch_token(code=auth_code)
+                    
+                    st.session_state.youtube_credentials = flow.credentials
+                    st.success("🎉 Successfully authenticated with YouTube!")
+                    st.balloons()
+                    
+                    # Clean up
+                    del st.session_state.oauth_flow
+                    del st.session_state.auth_url
+                    st.rerun()
+                    
+                except Exception as e:
+                    st.error(f"❌ Authentication failed: {e}")
+    
+    else:
+        # User is authenticated
+        st.success("✅ Connected to YouTube")
+        
+        try:
+            credentials = st.session_state.youtube_credentials
+            youtube_service = YouTubeService(credentials)
+            
+            # Get channel info
+            try:
+                channel_info = youtube_service.get_channel_info()
+                if channel_info:
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        st.write(f"**Channel:** {channel_info['title']}")
+                        st.write(f"**Subscribers:** {channel_info['subscriber_count']}")
+                    with col2:
+                        if st.button("Disconnect"):
+                            del st.session_state.youtube_credentials
+                            st.rerun()
+            except Exception as e:
+                st.warning(f"Could not fetch channel info: {e}")
+            
+            # Upload Form Section
+            if 'generated_video_path' in st.session_state and os.path.exists(st.session_state.generated_video_path):
+                st.subheader("📤 Upload Video")
+                
+                # Video detection and analysis
+                try:
+                    video_analysis = youtube_service.detect_shorts_format(st.session_state.generated_video_path)
+                    
+                    if video_analysis:
+                        if video_analysis['is_shorts']:
+                            st.success("✅ Video detected as YouTube Short")
+                            st.write(f"Duration: {video_analysis['duration']:.1f}s, "
+                                   f"Resolution: {video_analysis['width']}×{video_analysis['height']}")
+                        else:
+                            st.info("ℹ️ Video does not meet YouTube Shorts criteria")
+                except Exception as e:
+                    st.warning(f"Could not analyze video: {e}")
+                    video_analysis = None
+                
+                # Upload form
+                with st.form("upload_form"):
+                    st.subheader("Video Details")
+                    
+                    # Basic Information
+                    title = st.text_input("Title *", max_chars=100, help="Maximum 100 characters")
+                    description = st.text_area("Description", max_chars=5000, height=100, help="Maximum 5000 characters")
+                    tags = st.text_input("Tags (comma-separated)", help="Separate tags with commas, max 500 characters total")
+                    
+                    # Privacy & Scheduling
+                    privacy = st.selectbox("Privacy", ["private", "unlisted", "public"])
+                    
+                    schedule_option = st.radio("Publishing", ["Upload now", "Schedule for later"])
+                    
+                    publish_at = None
+                    if schedule_option == "Schedule for later":
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            schedule_date = st.date_input("Publish Date")
+                        with col2:
+                            schedule_time = st.time_input("Publish Time")
+                        
+                        from datetime import datetime, timezone
+                        publish_datetime = datetime.combine(schedule_date, schedule_time)
+                        publish_at = publish_datetime.replace(tzinfo=timezone.utc).isoformat()
+                    
+                    # YouTube Shorts handling
+                    auto_detect_shorts = st.checkbox("Auto-detect as YouTube Short", value=True)
+                    is_shorts = False
+                    if auto_detect_shorts and video_analysis and video_analysis['is_shorts']:
+                        is_shorts = True
+                        st.info("Will be tagged as YouTube Short (#Shorts)")
+                    
+                    # Submit button
+                    submitted = st.form_submit_button("🚀 Upload to YouTube", type="primary")
+                    
+                    if submitted:
+                        if not title.strip():
+                            st.error("Please provide a video title")
+                        else:
+                            # Prepare metadata
+                            metadata = VideoMetadata()
+                            metadata.title = title.strip()
+                            metadata.description = description.strip()
+                            metadata.tags = [tag.strip() for tag in tags.split(',') if tag.strip()] if tags else []
+                            metadata.privacy_status = privacy
+                            metadata.publish_at = publish_at
+                            metadata.shorts_format = is_shorts
+                            
+                            # Upload video
+                            with st.spinner("Uploading video to YouTube..."):
+                                try:
+                                    result = youtube_service.upload_video(st.session_state.generated_video_path, metadata)
+                                    
+                                    if result:
+                                        st.success("🎉 Video uploaded successfully!")
+                                        
+                                        col1, col2 = st.columns(2)
+                                        with col1:
+                                            st.write(f"**Title:** {result['title']}")
+                                            st.write(f"**Status:** {result['status']}")
+                                            if result.get('publish_at'):
+                                                st.write(f"**Scheduled:** {result['publish_at']}")
+                                        
+                                        with col2:
+                                            st.markdown(f"[🔗 View on YouTube]({result['video_url']})")
+                                            st.code(result['video_url'])
+                                    
+                                    else:
+                                        st.error("Upload failed. Please check the error messages above.")
+                                        
+                                except Exception as e:
+                                    st.error(f"Upload error: {e}")
+            
+            else:
+                st.info("📹 Generate a video first to enable YouTube upload")
+                
+        except Exception as e:
+            st.error(f"YouTube service error: {e}")
+            if st.button("🔄 Clear Credentials"):
+                del st.session_state.youtube_credentials
+                st.rerun()
 
 # Removed sidebar
