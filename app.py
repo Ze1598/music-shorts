@@ -582,6 +582,8 @@ with tab_youtube:
             
             # Clean up
             del st.session_state.oauth_flow
+            if 'auth_url' in st.session_state:
+                del st.session_state.auth_url
             
             # Clear the URL parameters by rerunning
             st.query_params.clear()
@@ -594,8 +596,12 @@ with tab_youtube:
     elif oauth_error:
         st.error(f"❌ OAuth error: {oauth_error}")
         st.query_params.clear()
+        if 'oauth_flow' in st.session_state:
+            del st.session_state.oauth_flow
+        if 'auth_url' in st.session_state:
+            del st.session_state.auth_url
     
-    # Check if authenticated
+    # Check if authenticated (this should now be set by the OAuth callback above)
     youtube_authenticated = 'youtube_credentials' in st.session_state
     
     if not youtube_authenticated:
