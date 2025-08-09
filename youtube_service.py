@@ -103,6 +103,43 @@ class YouTubeService:
             st.error(f"Error analyzing video: {e}")
             return None
     
+    def validate_scheduled_time(self, publish_at):
+        """Validate scheduled publication time"""
+        if not publish_at:
+            return True, "No scheduling specified"
+            
+        try:
+            from datetime import datetime, timezone
+            import pytz
+            
+            # Parse the RFC 3339 datetime format from YouTube
+            if publish_at.endswith('Z'):
+                # Remove Z and parse as UTC
+                scheduled_time = datetime.fromisoformat(publish_at.replace('Z', ''))
+                scheduled_time = scheduled_time.replace(tzinfo=timezone.utc)
+            else:
+                # Handle other ISO formats
+                scheduled_time = datetime.fromisoformat(publish_at.replace('Z', '+00:00'))
+                if scheduled_time.tzinfo is None:
+                    scheduled_time = scheduled_time.replace(tzinfo=timezone.utc)
+            
+            now_utc = datetime.now(timezone.utc)
+            
+            # Check if time is in the future
+            if scheduled_time <= now_utc:
+                return False, "Scheduled time must be in the future"
+                
+            # Check if time is not too far in the future (YouTube limit: ~1 year)
+            from datetime import timedelta
+            max_future = now_utc + timedelta(days=365)
+            if scheduled_time > max_future:
+                return False, "Scheduled time cannot be more than 1 year in the future"
+                
+            return True, f"Valid scheduling for {scheduled_time.strftime('%Y-%m-%d %H:%M:%S')} UTC"
+            
+        except Exception as e:
+            return False, f"Invalid scheduling format: {e}"
+
     def upload_video(self, video_path, metadata):
         """Upload video file to YouTube"""
         # Validate video file
@@ -110,6 +147,33 @@ class YouTubeService:
         if not is_valid:
             st.error(message)
             return None
+            
+        # Validate scheduling if specified
+        if metadata.publish_at:
+            st.info(f"🔍 Scheduling timestamp: {metadata.publish_at}")
+            is_valid_schedule, schedule_message = self.validate_scheduled_time(metadata.publish_at)
+            if not is_valid_schedule:
+                st.error(f"Scheduling error: {schedule_message}")
+                return None
+            else:
+                st.info(f"✅ {schedule_message}")
+                
+            # Additional YouTube-specific validation
+            try:
+                from datetime import datetime, timezone, timedelta
+                scheduled_time = datetime.fromisoformat(metadata.publish_at.replace('Z', ''))
+                scheduled_time = scheduled_time.replace(tzinfo=timezone.utc)
+                now_utc = datetime.now(timezone.utc)
+                
+                # YouTube requires at least 60 minutes in the future (conservative)
+                min_future = now_utc + timedelta(minutes=60)
+                if scheduled_time < min_future:
+                    st.error("⚠️ YouTube requires scheduling at least 60 minutes in the future")
+                    return None
+                    
+            except Exception as e:
+                st.error(f"Error validating timestamp: {e}")
+                return None
             
         try:
             # Prepare video metadata

@@ -1,3 +1,4 @@
+# Updated with enhanced scheduling - v4 (fixed privacy + timing requirements)
 import streamlit as st
 import os
 import tempfile
@@ -591,14 +592,30 @@ with tab_youtube:
             ### 🔐 Step 2: Enter Authorization Code
             """)
             
-            auth_code = st.text_input(
-                "Paste the authorization code from Google:",
-                placeholder="Enter the code here...",
-                help="Google will show you a code after authorization. Copy and paste it here."
+            auth_input = st.text_input(
+                "Paste the full callback URL or just the authorization code:",
+                placeholder="http://localhost/?code=4/0A... or just the code",
+                help="After authorization, Google will redirect to a localhost URL. You can paste the entire URL here, or just extract and paste the code part."
             )
             
-            if st.button("✅ Complete Authentication") and auth_code:
+            if st.button("✅ Complete Authentication") and auth_input:
                 try:
+                    # Parse auth code from input (handle both full URL and code-only)
+                    auth_code = auth_input.strip()
+                    
+                    # Check if input looks like a URL
+                    if auth_code.startswith('http'):
+                        from urllib.parse import urlparse, parse_qs
+                        parsed_url = urlparse(auth_code)
+                        query_params = parse_qs(parsed_url.query)
+                        
+                        if 'code' in query_params:
+                            auth_code = query_params['code'][0]
+                            st.info(f"✅ Extracted code from URL: {auth_code[:20]}...")
+                        else:
+                            st.error("❌ No authorization code found in the URL. Please check the URL.")
+                            st.stop()
+                    
                     flow = st.session_state.oauth_flow
                     flow.fetch_token(code=auth_code)
                     
@@ -657,44 +674,165 @@ with tab_youtube:
                     video_analysis = None
                 
                 # Upload form
-                with st.form("upload_form"):
-                    st.subheader("Video Details")
-                    
-                    # Basic Information
-                    title = st.text_input("Title *", max_chars=100, help="Maximum 100 characters")
-                    description = st.text_area("Description", max_chars=5000, height=100, help="Maximum 5000 characters")
-                    tags = st.text_input("Tags (comma-separated)", help="Separate tags with commas, max 500 characters total")
-                    
-                    # Privacy & Scheduling
-                    privacy = st.selectbox("Privacy", ["private", "unlisted", "public"])
-                    
-                    schedule_option = st.radio("Publishing", ["Upload now", "Schedule for later"])
-                    
-                    publish_at = None
-                    if schedule_option == "Schedule for later":
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            schedule_date = st.date_input("Publish Date")
-                        with col2:
-                            schedule_time = st.time_input("Publish Time")
+                st.subheader("Video Details")
+                
+                # Basic Information
+                title = st.text_input("Title *", max_chars=100, help="Maximum 100 characters")
+                description = st.text_area("Description", max_chars=5000, height=100, help="Maximum 5000 characters")
+                tags = st.text_input("Tags (comma-separated)", help="Separate tags with commas, max 500 characters total")
+                
+                # Privacy & Scheduling (moved outside form for interactivity)
+                schedule_option = st.radio("Publishing", ["Upload now", "Schedule for later"])
+                
+                if schedule_option == "Schedule for later":
+                    st.info("📋 **Note:** Scheduled videos must be set to 'private' privacy status")
+                    privacy = "private"  # Force private for scheduling
+                    st.write(f"**Privacy Status:** {privacy} (required for scheduling)")
+                else:
+                    privacy = st.selectbox("Privacy", ["private", "unlisted", "public"], index=2)
+                
+                publish_at = None
+                if schedule_option == "Schedule for later":
+                        st.info("📅 Schedule your video for future publication")
                         
-                        from datetime import datetime, timezone
-                        publish_datetime = datetime.combine(schedule_date, schedule_time)
-                        publish_at = publish_datetime.replace(tzinfo=timezone.utc).isoformat()
-                    
-                    # YouTube Shorts handling
-                    auto_detect_shorts = st.checkbox("Auto-detect as YouTube Short", value=True)
-                    is_shorts = False
-                    if auto_detect_shorts and video_analysis and video_analysis['is_shorts']:
-                        is_shorts = True
-                        st.info("Will be tagged as YouTube Short (#Shorts)")
-                    
-                    # Submit button
+                        # Date and time selection with better validation
+                        from datetime import datetime, timezone, timedelta
+                        import pytz
+                        
+                        # Common timezones list
+                        common_timezones = [
+                            'UTC',
+                            'America/New_York',      # Eastern
+                            'America/Chicago',       # Central  
+                            'America/Denver',        # Mountain
+                            'America/Los_Angeles',   # Pacific
+                            'Europe/London',
+                            'Europe/Paris',
+                            'Europe/Berlin',
+                            'Asia/Tokyo',
+                            'Asia/Shanghai',
+                            'Australia/Sydney',
+                            'US/Eastern',
+                            'US/Central',
+                            'US/Mountain', 
+                            'US/Pacific'
+                        ]
+                        
+                        col1, col2, col3 = st.columns(3)
+                        
+                        with col1:
+                            # Set minimum date to today  
+                            min_date = datetime.now().date()
+                            max_date = min_date + timedelta(days=365)
+                            
+                            schedule_date = st.date_input(
+                                "📅 Publish Date",
+                                min_value=min_date,
+                                max_value=max_date,
+                                value=min_date,
+                                help="Select the date when you want the video to be published"
+                            )
+                        
+                        with col2:
+                            # Default to current time + 60 minutes in HH:MM format
+                            default_datetime = datetime.now() + timedelta(hours=1)
+                            default_time_str = default_datetime.strftime("%H:%M")
+                            
+                            schedule_time_str = st.text_input(
+                                "🕒 Publish Time (HH:MM)",
+                                value=default_time_str,
+                                help="Enter time in 24-hour format (e.g., 14:30)"
+                            )
+                            
+                            # Convert HH:MM to time object (reuse the existing function)
+                            def time_str_to_time(time_str):
+                                try:
+                                    if ":" in time_str:
+                                        parts = time_str.split(":")
+                                        if len(parts) == 2:
+                                            hours, minutes = int(parts[0]), int(parts[1])
+                                            if 0 <= hours <= 23 and 0 <= minutes <= 59:
+                                                from datetime import time
+                                                return time(hours, minutes)
+                                    return None
+                                except (ValueError, IndexError):
+                                    return None
+                            
+                            schedule_time = time_str_to_time(schedule_time_str)
+                            if not schedule_time:
+                                st.error("⚠️ Invalid time format. Use HH:MM (e.g., 14:30)")
+                                schedule_time = default_datetime.time()
+                        
+                        with col3:
+                            selected_tz = st.selectbox(
+                                "🌍 Timezone",
+                                common_timezones,
+                                index=0,  # UTC default
+                                help="Select your timezone for accurate scheduling"
+                            )
+                        
+                        # Combine date, time, and timezone
+                        try:
+                            from datetime import datetime as dt
+                            tz = pytz.timezone(selected_tz)
+                            local_datetime = dt.combine(schedule_date, schedule_time)
+                            localized_datetime = tz.localize(local_datetime)
+                            utc_datetime = localized_datetime.astimezone(pytz.UTC)
+                            
+                            # YouTube API expects RFC 3339 format (ISO 8601 with Z suffix for UTC)
+                            publish_at = utc_datetime.strftime('%Y-%m-%dT%H:%M:%S.000Z')
+                            
+                            # Validation: ensure scheduled time meets YouTube requirements
+                            now_utc = datetime.now(pytz.UTC)
+                            min_future = now_utc + timedelta(minutes=60)  # Conservative 60-minute minimum
+                            
+                            if utc_datetime <= now_utc:
+                                st.error("⚠️ Scheduled time must be in the future")
+                                publish_at = None
+                            elif utc_datetime < min_future:
+                                st.error("⚠️ YouTube requires scheduling at least 60 minutes in the future (recommended)")
+                                publish_at = None
+                            else:
+                                # Show confirmation of scheduled time
+                                time_until = utc_datetime - now_utc
+                                if time_until.days > 0:
+                                    time_str = f"{time_until.days} days, {time_until.seconds // 3600} hours"
+                                else:
+                                    hours = time_until.seconds // 3600
+                                    minutes = (time_until.seconds % 3600) // 60
+                                    time_str = f"{hours}h {minutes}m"
+                                
+                                st.success(f"✅ Video will be published in {time_str}")
+                                st.caption(f"UTC time: {utc_datetime.strftime('%Y-%m-%d %H:%M:%S')} UTC")
+                                
+                        except Exception as e:
+                            st.error(f"Error processing scheduled time: {e}")
+                            publish_at = None
+                
+                # YouTube Shorts handling (moved outside form)
+                auto_detect_shorts = st.checkbox("Auto-detect as YouTube Short", value=True)
+                is_shorts = False
+                if auto_detect_shorts and video_analysis and video_analysis['is_shorts']:
+                    is_shorts = True
+                    st.info("Will be tagged as YouTube Short (#Shorts)")
+                
+                # Upload button (now in a separate form for submission)
+                with st.form("upload_submit_form"):
                     submitted = st.form_submit_button("🚀 Upload to YouTube", type="primary")
                     
                     if submitted:
+                        # Validation
+                        validation_errors = []
+                        
                         if not title.strip():
-                            st.error("Please provide a video title")
+                            validation_errors.append("Please provide a video title")
+                            
+                        if schedule_option == "Schedule for later" and not publish_at:
+                            validation_errors.append("Please select a valid future date and time for scheduling")
+                        
+                        if validation_errors:
+                            for error in validation_errors:
+                                st.error(error)
                         else:
                             # Prepare metadata
                             metadata = VideoMetadata()
@@ -711,18 +849,52 @@ with tab_youtube:
                                     result = youtube_service.upload_video(st.session_state.generated_video_path, metadata)
                                     
                                     if result:
-                                        st.success("🎉 Video uploaded successfully!")
+                                        # Show success message based on scheduling
+                                        if result.get('publish_at'):
+                                            st.success("🎉 Video uploaded and scheduled successfully!")
+                                            st.balloons()
+                                        else:
+                                            st.success("🎉 Video uploaded successfully!")
+                                            st.balloons()
                                         
                                         col1, col2 = st.columns(2)
                                         with col1:
                                             st.write(f"**Title:** {result['title']}")
-                                            st.write(f"**Status:** {result['status']}")
+                                            st.write(f"**Privacy:** {result['status'].title()}")
+                                            st.write(f"**Upload Status:** {result.get('upload_status', 'N/A').title()}")
+                                            
                                             if result.get('publish_at'):
-                                                st.write(f"**Scheduled:** {result['publish_at']}")
+                                                from datetime import datetime
+                                                try:
+                                                    # Parse and format the scheduled time
+                                                    scheduled_dt = datetime.fromisoformat(result['publish_at'].replace('Z', '+00:00'))
+                                                    formatted_time = scheduled_dt.strftime('%Y-%m-%d at %H:%M UTC')
+                                                    st.write(f"**📅 Scheduled for:** {formatted_time}")
+                                                    
+                                                    # Show time until publication
+                                                    from datetime import timezone
+                                                    now_utc = datetime.now(timezone.utc)
+                                                    time_diff = scheduled_dt - now_utc
+                                                    
+                                                    if time_diff.days > 0:
+                                                        st.info(f"⏰ Will be published in {time_diff.days} days and {time_diff.seconds // 3600} hours")
+                                                    else:
+                                                        hours = time_diff.seconds // 3600
+                                                        minutes = (time_diff.seconds % 3600) // 60
+                                                        st.info(f"⏰ Will be published in {hours}h {minutes}m")
+                                                        
+                                                except Exception:
+                                                    st.write(f"**📅 Scheduled for:** {result['publish_at']}")
+                                            else:
+                                                st.write("**Status:** Published immediately")
                                         
                                         with col2:
                                             st.markdown(f"[🔗 View on YouTube]({result['video_url']})")
-                                            st.code(result['video_url'])
+                                            st.code(result['video_url'], language=None)
+                                            
+                                            # Additional info for scheduled videos
+                                            if result.get('publish_at'):
+                                                st.info("💡 Video is uploaded but won't be visible until the scheduled time")
                                     
                                     else:
                                         st.error("Upload failed. Please check the error messages above.")
