@@ -793,8 +793,8 @@ with tab_youtube:
                             )
                         
                         with col2:
-                            # Default to current time + 60 minutes in HH:MM format
-                            default_datetime = datetime.now() + timedelta(hours=1)
+                            # Default to current time + 65 minutes in HH:MM format (to be safely above 60 min requirement)
+                            default_datetime = datetime.now() + timedelta(minutes=65)
                             default_time_str = default_datetime.strftime("%H:%M")
                             
                             schedule_time_str = st.text_input(
